@@ -88,6 +88,9 @@ nano ltmc_configuration.json
 }
 ```
 
+options:
+- architecture: BERT
+
 **Supported models:** BIGRUS, LABEL_WISE_ATTENTION_NETWORK, ZERO_LABEL_WISE_ATTENTION_NETWORK, BERT
 **Supported token encodings:** word2vec, elmo 
 **Supported document encoders:** grus, cnns
