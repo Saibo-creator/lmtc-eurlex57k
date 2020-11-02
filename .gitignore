@@ -6,3 +6,4 @@
 .idea/
 .ipynb_checkpoints
 lmtc-eurlex57k.egg-info
+data/

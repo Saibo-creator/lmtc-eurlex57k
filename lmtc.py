@@ -135,7 +135,7 @@ class LMTC:
         loader = JSONLoader()
 
         documents = []
-        for filename in tqdm.tqdm(sorted(filenames)[:10]):
+        for filename in tqdm.tqdm(sorted(filenames)):
             documents.append(loader.read_file(filename))
 
         return documents
@@ -262,7 +262,9 @@ class LMTC:
         LOGGER.info('Load valid data')
         LOGGER.info('------------------------------')
         val_samples, val_targets = self.encode_dataset(val_samples, val_tags)
-        self.calculate_performance(network=network, true_samples=val_samples, true_targets=val_targets)
+        #self.calculate_performance(network=network, true_samples=val_samples, true_targets=val_targets)
+        val_predictions=self.predict(network=network, true_samples=val_samples)
+        self.calculate_performance(val_predictions, true_targets=val_targets)
 
         LOGGER.info('Load test data')
         LOGGER.info('------------------------------')
@@ -271,17 +273,23 @@ class LMTC:
         limit = len(test_documents) % Configuration['model']['batch_size'] if Configuration['model']['architecture'] == 'BERT' else 0
         test_samples, test_tags = self.process_dataset(test_documents if not limit else test_documents[:-limit])
         test_samples, test_targets = self.encode_dataset(test_samples, test_tags)
-        self.calculate_performance(network=network, true_samples=test_samples, true_targets=test_targets)
+        
+        test_predictions=self.predict(network=network, true_samples=test_samples)
+        self.calculate_performance(test_predictions, true_targets=test_targets)
 
         total_time = time.time() - start_time
         LOGGER.info('\nTotal Training Time: {} secs'.format(total_time))
 
-    def calculate_performance(self, network, true_samples, true_targets):
 
+    def predict(self,network, true_samples):
         predictions = network.model.predict(true_samples,
                                             batch_size=Configuration['model']['batch_size']
                                             if Configuration['model']['architecture'] == 'BERT'
                                                or Configuration['model']['token_encoding'] == 'elmo' else None)
+
+        return predictions
+
+    def calculate_performance(self, true_targets, predictions):
 
         pred_targets = (predictions > 0.5).astype('int32')
 
