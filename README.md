@@ -63,7 +63,7 @@ nano ltmc_configuration.json
     "decision_type": "multi_label"
   },
   "model": {
-    "architecture": "LABEL_WISE_ATTENTION_NETWORK",
+    "architecture": "LABEL_WISE_ATTENTION_NETWORK", // or "BERT"
     "document_encoder": "grus",
     "n_hidden_layers": 1,
     "hidden_units_size": 300,
@@ -75,7 +75,8 @@ nano ltmc_configuration.json
     "attention_mechanism": "attention",
     "token_encoding": "word2vec",
     "embeddings": "law2vec.200d.txt",
-    "bert": "bertbase"
+    "bert": "bertbase",
+    "bert_case": "uncased" // added to fix bug(must be uncased). link https://tfhub.dev/google/collections/bert/1
   },
   "sampling": {
     "max_sequences_size": null,
