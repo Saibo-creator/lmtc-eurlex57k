@@ -1,9 +1,5 @@
 ## Large-Scale Multi-Label Text Classification on EU Legislation
 
-This is the code used for the experiments described in the following paper:
-
-
-> I. Chalkidis, M. Fergadiotis, P. Malakasiotis and I. Androutsopoulos, "Large-Scale Multi-Label Text Classification on EU Legislation". Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics (ACL 2019), Florence, Italy, (short papers), 2019 (https://www.aclweb.org/anthology/P19-1636/)
 
 ## Requirements:
 
@@ -76,7 +72,7 @@ nano ltmc_configuration.json
     "token_encoding": "word2vec",
     "embeddings": "law2vec.200d.txt",
     "bert": "bertbase",
-    "bert_case": "uncased" // added to fix bug(must be uncased). link https://tfhub.dev/google/collections/bert/1
+    "bert_case": "uncased" // added to fix bug(must be uncased,cf huggingface legalbert:uncased). link https://tfhub.dev/google/collections/bert/1
   },
   "sampling": {
     "max_sequences_size": null,
