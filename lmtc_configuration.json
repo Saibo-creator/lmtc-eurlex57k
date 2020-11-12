@@ -17,7 +17,8 @@
     "attention_mechanism": "attention",
     "token_encoding": "word2vec",
     "embeddings": "law2vec.200d.txt",
-    "bert": "bertbase"
+    "bert": "bertbase",
+    "bert_case": "uncased"
   },
   "sampling": {
     "max_sequences_size": null,
