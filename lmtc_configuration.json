@@ -13,7 +13,7 @@
     "word_dropout_rate": 0.00,
     "lr": 1e-5,
     "batch_size": 4, 
-    "epochs": 200,
+    "epochs": 50,
     "attention_mechanism": "attention",
     "token_encoding": "word2vec",
     "embeddings": "law2vec.200d.txt",

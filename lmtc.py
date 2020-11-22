@@ -384,6 +384,7 @@ class LMTC:
                 LOGGER.info('----------------------------------------------------')
 
 
+
 class Calculate_performance(Callback):
     """
 
@@ -411,11 +412,12 @@ class Calculate_performance(Callback):
         LOGGER.info("predictions is saved to{}".format(outfile))
 
         template = 'R@{} : {:1.3f}   P@{} : {:1.3f}   RP@{} : {:1.3f}   NDCG@{} : {:1.3f}'
-        for average_type in ['micro', 'macro', 'weighted']:
-            p = precision_score(self.true_targets, pred_targets, average=average_type)
-            r = recall_score(self.true_targets, pred_targets, average=average_type)
-            f1 = f1_score(self.true_targets, pred_targets, average=average_type)
-            LOGGER.info('{:8} - Precision: {:1.4f}   Recall: {:1.4f}   F1: {:1.4f}'.format(average_type, p, r, f1))
+        i=5
+        r_k = mean_recall_k(self.true_targets, pred_targets, k=i)
+        p_k = mean_precision_k(self.true_targets, pred_targets, k=i)
+        rp_k = mean_rprecision_k(self.true_targets, pred_targets, k=i)
+        ndcg_k = mean_ndcg_score(self.true_targets, pred_targets, k=i)
+        LOGGER.info(template.format(i, r_k, i, p_k, i, rp_k, i, ndcg_k))
 
 
 class SampleGenerator(Sequence):
@@ -454,38 +456,9 @@ class SampleGenerator(Sequence):
         if self.shuffle:
             np.random.shuffle(self.indices)
 
-# class Generator_proxy(Sequence):
-
-#     def __init__(self, generator):
-#         self.underhood = generator
-
-#     def __len__(self):
-#         return self.underhood.__len__()
-
-#     def __getitem__(self, index):
-#         x_batch, y_batch=self.underhood.__getitem__(index)
-#         x_batch=x_batch[:,:512,:]
-#         return x_batch, y_batch
-
-#     def on_epoch_end(self):
-#         self.underhood.on_epoch_end()
 
 if __name__ == '__main__':
-    # configure
-    # configuration_fn="data/configuration.pickle"
-    # if os.path.exists(configuration_fn):
-    #     print("configuration alreay initiated, load them now.")
-    #     with open(configuration_fn, "rb") as f:
-    #         Configuration = pickle.load(f) 
-    # else:
-    #     Configuration.configure()
-    #     with open(configuration_fn, "wb") as f:
-    #         pickle.dump(Configuration,f)
 
-    # # new classifier
-    # lmTextClassifier=LMTC(Configuration)
-    # # train
-    # lmTextClassifier.train()
     import argparse, sys
 
     parser = argparse.ArgumentParser()
