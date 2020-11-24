@@ -4,7 +4,8 @@ from keras.layers import Layer, Lambda
 import keras.backend as K
 from configuration import Configuration
 from typing import List
-from transformers import  AutoModel
+from transformers import  TFAutoModel
+import tensorflow as tf
 
 
 try:
@@ -30,8 +31,8 @@ class BERT(Layer):
         if Configuration['model']['bert'] == 'bertbase':
             self.bert = hub.Module('https://tfhub.dev/google/bert_{}_L-12_H-768_A-12/1'.format(Configuration['model']['bert_case']),
                                    trainable=True, name="{}_module".format(self.name))
-        # elif Configuration['model']['bert'] == 'legalbert':
-        #     self.bert = AutoModel.from_pretrained("nlpaueb/legal-bert-base-uncased")
+        elif Configuration['model']['bert'] == 'legalbert':
+            self.bert = TFAutoModel.from_pretrained("nlpaueb/legal-bert-base-uncased")
         else:
             raise Exception('Unsupported bert module: "{}". Valid modules are: bertbase'.format(Configuration['model']['bert']))
 
@@ -42,18 +43,18 @@ class BERT(Layer):
 
     def call(self, x, mask=None):
 
-        splits = Lambda(lambda k: K.tf.split(k, num_or_size_splits=3, axis=2))(x)
+        splits = Lambda(lambda k: tf.split(k, num_or_size_splits=3, axis=2))(x)
 
         inputs = []
         for i in range(len(splits)):
-            inputs.append(Lambda(lambda s: K.tf.squeeze(s, axis=-1), name='squeeze_{}'.format(i))(splits[i]))
+            inputs.append(Lambda(lambda s: tf.squeeze(s, axis=-1), name='squeeze_{}'.format(i))(splits[i]))
 
         outputs = self.bert(dict(input_ids=inputs[0], input_mask=inputs[1], segment_ids=inputs[2]),
                             as_dict=True, signature='tokens')[
             'sequence_output']
 
         if self.output_representation == 'pooled_output':
-            return K.tf.squeeze(outputs[:, 0:1, :], axis=1)
+            return tf.squeeze(outputs[:, 0:1, :], axis=1)
         else:
             return outputs
 
