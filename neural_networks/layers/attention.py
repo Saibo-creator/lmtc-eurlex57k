@@ -1,6 +1,7 @@
-from keras import backend as K
-from keras import initializers, regularizers, constraints
-from keras.layers.core import Layer
+# import tensorflow as tf
+from tensorflow.keras import backend as K
+from tensorflow.keras import initializers, regularizers, constraints
+from tensorflow.keras.layers import Layer
 
 
 def dot_product(x, kernel):

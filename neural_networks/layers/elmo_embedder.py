@@ -1,7 +1,7 @@
 import keras.backend as K
 import tensorflow as tf
 import tensorflow_hub as hub
-from keras.layers import Layer
+from tensorflow.keras.layers import Layer
 
 
 class ElmoEmbeddingLayer(Layer):
@@ -12,7 +12,7 @@ class ElmoEmbeddingLayer(Layer):
         super(ElmoEmbeddingLayer, self).__init__(**kwargs)
 
     def build(self, input_shape):
-        self.elmo = hub.Module('https://tfhub.dev/google/elmo/2',
+        self.elmo = hub.Load('https://tfhub.dev/google/elmo/2',
                                trainable=True, name="{}_module".format(self.name))
         self.trainable_weights += K.tf.trainable_variables(scope="^{}_module/.*".format(self.name))
         super(ElmoEmbeddingLayer, self).build(input_shape)

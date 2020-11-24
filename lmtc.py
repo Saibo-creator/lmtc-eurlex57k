@@ -17,11 +17,11 @@ import numpy as np
 from tempfile import TemporaryFile
 from copy import deepcopy
 from collections import Counter
-from keras.callbacks import EarlyStopping, ModelCheckpoint, Callback
-from keras.utils import Sequence
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, Callback
+from tensorflow.keras.utils import Sequence
 from nltk.tokenize import word_tokenize
 from sklearn.metrics import f1_score, precision_score, recall_score
-import tensorflow as tf
+# import tensorflow as tf
 from json_loader import JSONLoader
 from vectorizer import W2VVectorizer, ELMoVectorizer, BERTVectorizer,HgBERTVectorizer
 from data import DATA_SET_DIR, MODELS_DIR
@@ -30,7 +30,7 @@ from metrics import mean_recall_k, mean_precision_k, mean_ndcg_score, mean_rprec
 from neural_networks.lmtc_networks.document_classification import DocumentClassification
 from neural_networks.lmtc_networks.label_driven_classification import LabelDrivenClassification
 from keras import backend as K
-from keras.models import load_model
+from tensorflow.keras.models import load_model
 from neural_networks.layers.bert import BERT
 
 LOGGER = logging.getLogger(__name__)

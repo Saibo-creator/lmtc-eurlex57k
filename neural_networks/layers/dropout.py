@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 from __future__ import division
-
+# import tensorflow as tf
 from keras import backend as K
-from keras.engine import InputSpec
-from keras.layers import Dropout
+from tensorflow.keras.layers import InputSpec
+from tensorflow.keras.layers import Dropout
 
 
 class TimestepDropout(Dropout):

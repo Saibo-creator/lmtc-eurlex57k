@@ -1,13 +1,14 @@
 import numpy as np
 import os
 from gensim.models import KeyedVectors
-from keras import backend as K
-from keras.layers import Bidirectional
-from keras.layers import Conv1D, Activation, Embedding
-from keras.layers import Input, SpatialDropout1D
-from keras.layers import GRU, CuDNNGRU, add, concatenate
-from keras.models import Model
-from keras.optimizers import Adam
+from tensorflow.keras import backend as K
+from tensorflow.keras.layers import Bidirectional
+from tensorflow.keras.layers import Conv1D, Activation, Embedding
+from tensorflow.keras.layers import Input, SpatialDropout1D
+from tensorflow.keras.layers import GRU, add, concatenate
+from tensorflow.compat.v1.keras.layers import CuDNNGRU
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
 
 from data import VECTORS_DIR
 from configuration import Configuration
@@ -133,10 +134,10 @@ class LabelDrivenClassification:
 
         # Labels Encoding
         if self.elmo:
-            labels_inputs = Input(tensor=K.tf.convert_to_tensor(self.label_terms_ids, dtype='string'), name='label_inputs')
+            labels_inputs = Input(tensor=tf.convert_to_tensor(self.label_terms_ids, dtype='string'), name='label_inputs')
             labels_embs = ElmoEmbeddingLayer()(labels_inputs)
         else:
-            labels_inputs = Input(tensor=K.tf.convert_to_tensor(self.label_terms_ids, dtype=K.tf.int32), name='label_inputs')
+            labels_inputs = Input(tensor=tf.convert_to_tensor(self.label_terms_ids, dtype=tf.int32), name='label_inputs')
             labels_embs = self.pretrained_embeddings(labels_inputs)
 
         label_encodings = SpatialDropout1D(dropout_rate)(labels_embs)

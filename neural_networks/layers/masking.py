@@ -7,7 +7,8 @@ from __future__ import print_function
 
 
 from keras import backend as K
-from keras.engine.base_layer import Layer
+# from keras.engine.base_layer import Layer
+from tensorflow.keras.layers import Layer
 
 
 class SymmetricMasking(Layer):

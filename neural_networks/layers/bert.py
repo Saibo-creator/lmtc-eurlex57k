@@ -1,11 +1,11 @@
+import tensorflow as tf
 import logging
 import tensorflow_hub as hub
-from keras.layers import Layer, Lambda
-import keras.backend as K
+from tensorflow.keras.layers import Layer, Lambda
 from configuration import Configuration
 from typing import List
 from transformers import  TFAutoModel
-import tensorflow as tf
+
 
 
 try:
@@ -29,16 +29,17 @@ class BERT(Layer):
 
     def build(self, input_shape):
         if Configuration['model']['bert'] == 'bertbase':
-            self.bert = hub.Module('https://tfhub.dev/google/bert_{}_L-12_H-768_A-12/1'.format(Configuration['model']['bert_case']),
-                                   trainable=True, name="{}_module".format(self.name))
+            # self.bert = hub.load('https://tfhub.dev/google/bert_{}_L-12_H-768_A-12/1'.format(Configuration['model']['bert_case']),
+            #                        trainable=True, name="{}_module".format(self.name))
+            self.bert = hub.load('https://tfhub.dev/tensorflow/bert_en_{}_L-12_H-768_A-12/3'.format(Configuration['model']['bert_case']))
         elif Configuration['model']['bert'] == 'legalbert':
             self.bert = TFAutoModel.from_pretrained("nlpaueb/legal-bert-base-uncased")
         else:
             raise Exception('Unsupported bert module: "{}". Valid modules are: bertbase'.format(Configuration['model']['bert']))
 
         # Remove unused layers and set trainable parameters
-        self.trainable_weights += [var for var in self.bert.variables
-                                   if not "/cls/" in var.name and not "/pooler/" in var.name]
+        # self.trainable_weights += [var for var in self.bert.trainable_variables
+        #                            if not "/cls/" in var.name and not "/pooler/" in var.name]
         super(BERT, self).build(input_shape)
 
     def call(self, x, mask=None):
@@ -49,8 +50,7 @@ class BERT(Layer):
         for i in range(len(splits)):
             inputs.append(Lambda(lambda s: tf.squeeze(s, axis=-1), name='squeeze_{}'.format(i))(splits[i]))
 
-        outputs = self.bert(dict(input_ids=inputs[0], input_mask=inputs[1], segment_ids=inputs[2]),
-                            as_dict=True, signature='tokens')[
+        outputs = self.bert(dict(input_word_ids=inputs[0], input_mask=inputs[1], input_type_ids=inputs[2]))[
             'sequence_output']
 
         if self.output_representation == 'pooled_output':

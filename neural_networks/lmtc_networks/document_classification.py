@@ -2,16 +2,17 @@ import os
 
 import numpy as np
 from gensim.models import KeyedVectors
-from keras import backend as K
-from keras.layers import Bidirectional, GlobalMaxPooling1D, Dropout
-from keras.layers import CuDNNGRU, GRU
-from keras.layers import Dense, Embedding, add, concatenate
-from keras.layers import Input, SpatialDropout1D
-from keras.layers.wrappers import TimeDistributed
-from keras.models import Model
-from keras.optimizers import Adam
-from keras.regularizers import l2
-from keras.constraints import MinMaxNorm
+from tensorflow.keras import backend as K
+from tensorflow.keras.layers import Bidirectional, GlobalMaxPooling1D, Dropout
+from tensorflow.keras.layers import  GRU
+from tensorflow.compat.v1.keras.layers import CuDNNGRU
+from tensorflow.keras.layers import Dense, Embedding, add, concatenate
+from tensorflow.keras.layers import Input, SpatialDropout1D
+from tensorflow.keras.layers import TimeDistributed
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.regularizers import l2
+from tensorflow.keras.constraints import MinMaxNorm
 
 from data import VECTORS_DIR
 from configuration import Configuration
@@ -32,7 +33,7 @@ class DocumentClassification:
 
     def __del__(self):
         K.clear_session()
-        del self.model
+        # del self.model
 
     def PretrainedEmbedding(self):
 
