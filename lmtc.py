@@ -14,7 +14,7 @@ import pdb
 
 
 import numpy as np
-from tempfile import TemporaryFile
+from tempfile import TemporaryFile, NamedTemporaryFile
 from copy import deepcopy
 from collections import Counter
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, Callback
@@ -32,6 +32,7 @@ from neural_networks.lmtc_networks.label_driven_classification import LabelDrive
 from tensorflow.keras import backend as K
 from tensorflow.keras.models import load_model
 from neural_networks.layers.bert import BERT
+from sklearn.preprocessing import MultiLabelBinarizer
 
 LOGGER = logging.getLogger(__name__)
 
@@ -128,6 +129,7 @@ class LMTC:
 
         self.label_terms_ids = self.label_terms_ids[:self.labels_cutoff]
         label_terms = label_terms[:self.labels_cutoff]
+        # pdb.set_trace()
 
         LOGGER.info('Labels shape:    {}'.format(len(label_terms)))
         LOGGER.info('Frequent labels: {}'.format(len(frequent)))
@@ -145,10 +147,10 @@ class LMTC:
 
         documents = []
         for filename in tqdm.tqdm(sorted(filenames)):
-            # pdb.set_trace()
+            # .
             document=loader.read_file(filename)
             if model_type.lower()=="bert":
-                # pdb.set_trace()
+                # .
                 document.tokens=document.tokens[:500]#512
             documents.append(document)
 
@@ -166,7 +168,7 @@ class LMTC:
             if Configuration['sampling']['hierarchical']:
                 samples.append(document.sentences)
             else:
-                # pdb.set_trace()
+                # .
                 samples.append(document.tokens)
             targets.append(document.tags)
 
@@ -211,7 +213,7 @@ class LMTC:
     def train(self,create_new_generator):
 
         LOGGER.info(Configuration)
-        
+
         LOGGER.info('\n---------------- Train Starting ----------------')
 
         for param_name, value in Configuration['model'].items():
@@ -236,16 +238,16 @@ class LMTC:
             val_samples, val_tags = self.process_dataset(val_documents)
             val_generator = SampleGenerator(val_samples, val_tags, experiment=self,
                                             batch_size=Configuration['model']['batch_size'])
-            # pdb.set_trace()
+            # .
             documents = self.load_dataset('train',model_type)
             train_samples, train_tags = self.process_dataset(documents)
             train_generator = SampleGenerator(train_samples, train_tags, experiment=self,
                                             batch_size=Configuration['model']['batch_size'])
             
-            # pdb.set_trace()
+            # .
             with open(train_val_generator_fn, "wb") as f:
                 pickle.dump((train_generator, val_generator),f)
-            # pdb.set_trace()
+            # .
         
         
         
@@ -264,7 +266,7 @@ class LMTC:
                         hidden_units_size=Configuration['model']['hidden_units_size'],
                         dropout_rate=Configuration['model']['dropout_rate'],
                         word_dropout_rate=Configuration['model']['word_dropout_rate'],
-                        lr=Configuration['model']['lr'])
+                        lr=Configuration['model']['lr'],freeze_pretrained=Configuration["model"]["freeze_pretrained"])
 
         network.model.summary(line_length=200, print_fn=LOGGER.info)
 
@@ -280,7 +282,7 @@ class LMTC:
         LOGGER.info('Fit model')
         LOGGER.info('-----------')
         start_time = time.time()
-        # pdb.set_trace()
+        # .
 
         # if model_type == "bert":
         #     print("truncate sequence for bert model at 500th token") 
@@ -309,21 +311,22 @@ class LMTC:
                                                     workers=os.cpu_count()//2,
                                                     steps_per_epoch=len(train_generator),
                                                     epochs=Configuration['model']['epochs'],
-                                                    callbacks=[early_stopping, model_checkpoint,Calculate_performance(val_samples, val_targets)],
+                                                    callbacks=[early_stopping,Calculate_performance(val_samples, val_targets,list(self.label_ids.keys()))],
+                                                    # callbacks=[early_stopping, model_checkpoint,Calculate_performance(val_samples, val_targets)],
                                                         verbose = True)
+            best_epoch = np.argmin(fit_history.history['val_loss']) + 1
+            n_epochs = len(fit_history.history['val_loss'])
+            val_loss_per_epoch = '- ' + ' '.join('-' if fit_history.history['val_loss'][i] < np.min(fit_history.history['val_loss'][:i])
+                                                else '+' for i in range(1, len(fit_history.history['val_loss'])))
+            LOGGER.info('\nBest epoch: {}/{}'.format(best_epoch, n_epochs))
+            LOGGER.info('Val loss per epoch: {}\n'.format(val_loss_per_epoch))
+
         except KeyboardInterrupt:
             LOGGER.info("skip rest of training")
             
         network.model.save(os.path.join(MODELS_DIR, '{}.h5'.format('{}_{}_{}'.format(
             Configuration['task']['dataset'].upper(), 'HIERARCHICAL' if Configuration['sampling']['hierarchical'] else 'FLAT',
             Configuration['model']['architecture'].upper()))))
-
-        best_epoch = np.argmin(fit_history.history['val_loss']) + 1
-        n_epochs = len(fit_history.history['val_loss'])
-        val_loss_per_epoch = '- ' + ' '.join('-' if fit_history.history['val_loss'][i] < np.min(fit_history.history['val_loss'][:i])
-                                             else '+' for i in range(1, len(fit_history.history['val_loss'])))
-        LOGGER.info('\nBest epoch: {}/{}'.format(best_epoch, n_epochs))
-        LOGGER.info('Val loss per epoch: {}\n'.format(val_loss_per_epoch))
 
         del train_generator
 
@@ -394,27 +397,25 @@ class Calculate_performance(Callback):
     """
 
   Arguments:
-      schedule: a function that takes an epoch index
-          (integer, indexed from 0) and current learning rate
-          as inputs and returns a new learning rate as output (float).
   """
 
-    def __init__(self, true_samples, true_targets):
+    def __init__(self, true_samples, true_targets, class_):
         super(Calculate_performance, self).__init__()
         self.true_samples = true_samples
-        self.true_targets=true_targets
+        self.true_targets=MultiLabelBinarizer(classes=class_).fit_transform(true_targets)
 
     def on_epoch_end(self, epoch, logs=None):
+        
         predictions = self.model.predict(self.true_samples,
                                             batch_size=Configuration['model']['batch_size']
                                             if Configuration['model']['architecture'] == 'BERT'
                                                or Configuration['model']['token_encoding'] == 'elmo' else None)
         pred_targets = (predictions > 0.5).astype('int32')
 
-        
-        outfile = TemporaryFile()
+        # pdb.set_trace()
+        outfile = NamedTemporaryFile(delete=False)
         np.save(outfile, predictions)
-        LOGGER.info("predictions is saved to{}".format(outfile))
+        LOGGER.info("predictions is saved to{}".format(outfile.name))
 
         template = 'R@{} : {:1.3f}   P@{} : {:1.3f}   RP@{} : {:1.3f}   NDCG@{} : {:1.3f}'
         i=5
@@ -423,6 +424,12 @@ class Calculate_performance(Callback):
         rp_k = mean_rprecision_k(self.true_targets, pred_targets, k=i)
         ndcg_k = mean_ndcg_score(self.true_targets, pred_targets, k=i)
         LOGGER.info(template.format(i, r_k, i, p_k, i, rp_k, i, ndcg_k))
+
+        for average_type in ['micro', 'macro', 'weighted']:
+            p = precision_score(self.true_targets, pred_targets, average=average_type)
+            r = recall_score(self.true_targets, pred_targets, average=average_type)
+            f1 = f1_score(self.true_targets, pred_targets, average=average_type)
+            LOGGER.info('{:8} - Precision: {:1.4f}   Recall: {:1.4f}   F1: {:1.4f}'.format(average_type, p, r, f1))
 
 
 class SampleGenerator(Sequence):

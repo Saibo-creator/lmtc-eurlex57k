@@ -5,6 +5,7 @@ from tensorflow.keras.layers import Layer, Lambda
 from configuration import Configuration
 from typing import List
 from transformers import  TFAutoModel
+import pdb
 
 
 
@@ -18,8 +19,10 @@ LOGGER = logging.getLogger(__name__)
 
 
 class BERT(Layer):
-    def __init__(self, output_representation=0, **kwargs):
+    def __init__(self,freeze_pretrained, output_representation=0, **kwargs):
         self.bert = None
+        
+        self.trainable_=not freeze_pretrained
         super(BERT, self).__init__(**kwargs)
 
         if output_representation:
@@ -27,11 +30,20 @@ class BERT(Layer):
         else:
             self.output_representation = 'pooled_output'
 
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({
+            'freeze_pretrained': not self.trainable_,
+            'output_representation': self.output_representation,
+        })
+        return config
+
     def build(self, input_shape):
         if Configuration['model']['bert'] == 'bertbase':
             # self.bert = hub.load('https://tfhub.dev/google/bert_{}_L-12_H-768_A-12/1'.format(Configuration['model']['bert_case']),
             #                        trainable=True, name="{}_module".format(self.name))
-            self.bert = hub.load('https://tfhub.dev/tensorflow/bert_en_{}_L-12_H-768_A-12/3'.format(Configuration['model']['bert_case']))
+            self.bert = hub.KerasLayer('https://tfhub.dev/tensorflow/bert_en_{}_L-12_H-768_A-12/3'.format(Configuration['model']['bert_case']),
+            trainable=self.trainable_)
         elif Configuration['model']['bert'] == 'legalbert':
             self.bert = TFAutoModel.from_pretrained("nlpaueb/legal-bert-base-uncased")
         else:

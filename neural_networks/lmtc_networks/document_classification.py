@@ -18,7 +18,7 @@ from data import VECTORS_DIR
 from configuration import Configuration
 from neural_networks.layers import Camouflage, Attention, ContextualAttention, BERT
 from neural_networks.layers import TimestepDropout, SymmetricMasking, ElmoEmbeddingLayer
-
+import pdb
 
 class DocumentClassification:
     def __init__(self, label_terms_ids):
@@ -28,6 +28,8 @@ class DocumentClassification:
         self.elmo = True if 'elmo' in Configuration['model']['token_encoding'] else False
         self.n_classes = len(label_terms_ids)
         self._attention_mechanism = Configuration['model']['attention_mechanism']
+        self.freeze_pretrained=Configuration['model']['freeze_pretrained']
+
         if 'word2vec' in Configuration['model']['token_encoding']:
             self.word_embedding_path = os.path.join(VECTORS_DIR, Configuration['model']['embeddings'])
 
@@ -45,14 +47,14 @@ class DocumentClassification:
 
         return Model(inputs=inputs, outputs=embeds, name='embedding')
 
-    def compile(self, n_hidden_layers, hidden_units_size, dropout_rate, word_dropout_rate, lr):
+    def compile(self, n_hidden_layers, hidden_units_size, dropout_rate, word_dropout_rate, lr, freeze_pretrained):
 
         shape = (Configuration['sampling']['max_sequences_size'], Configuration['sampling']['max_sequence_size'])
         if Configuration['sampling']['hierarchical']:
             self._compile_hans(shape=shape, n_hidden_layers=n_hidden_layers, hidden_units_size=hidden_units_size,
                                dropout_rate=dropout_rate, word_dropout_rate=word_dropout_rate, lr=lr)
-        elif Configuration['model']['architecture'] == 'BERT':
-            self._compile_bert(shape=shape, dropout_rate=dropout_rate, lr=lr)
+        elif Configuration['model']['architecture'] in ['BERT','LEGALBERT','LEGALROBERTA']:
+            self._compile_bert(shape=shape, dropout_rate=dropout_rate, lr=lr, freeze_pretrained=freeze_pretrained)
         elif Configuration['model']['attention_mechanism']:
             self._compile_bigrus_attention(shape=shape, n_hidden_layers=n_hidden_layers, hidden_units_size=hidden_units_size,
                                            dropout_rate=dropout_rate, word_dropout_rate=word_dropout_rate, lr=lr)
@@ -266,10 +268,10 @@ class DocumentClassification:
                            outputs=[outputs])
         self.model.compile(optimizer=Adam(lr=lr, clipvalue=2.0), loss=losses, loss_weights=loss_weights)
 
-    def _compile_bert(self, shape, dropout_rate, lr):
+    def _compile_bert(self, shape, dropout_rate, lr, freeze_pretrained):
 
         word_inputs = Input(shape=(None, 3), dtype='int32')
-        doc_encoding = BERT()(word_inputs)
+        doc_encoding = BERT(freeze_pretrained)(word_inputs)
 
         doc_encoding = Dropout(dropout_rate)(doc_encoding)
 
