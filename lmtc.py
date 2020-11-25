@@ -29,7 +29,7 @@ from configuration import Configuration
 from metrics import mean_recall_k, mean_precision_k, mean_ndcg_score, mean_rprecision_k
 from neural_networks.lmtc_networks.document_classification import DocumentClassification
 from neural_networks.lmtc_networks.label_driven_classification import LabelDrivenClassification
-from keras import backend as K
+from tensorflow.keras import backend as K
 from tensorflow.keras.models import load_model
 from neural_networks.layers.bert import BERT
 
@@ -45,8 +45,8 @@ class LMTC:
             self.vectorizer2 = W2VVectorizer(w2v_model=Configuration['model']['embeddings'])
         elif 'bert' == Configuration['model']['architecture'].lower():
             self.vectorizer = BERTVectorizer()
-        elif 'legalbert' == Configuration['model']['architecture'].lower():
-            self.vectorizer = HgBERTVectorizer()
+        elif Configuration['model']['architecture'].lower() in ['legalbert']:
+            self.vectorizer = HgBERTVectorizer(Configuration['model']['architecture'].lower())
         else:
             self.vectorizer = W2VVectorizer(w2v_model=Configuration['model']['embeddings'])
         self.load_label_descriptions()
@@ -209,10 +209,15 @@ class LMTC:
         return samples[:,:512,:],targets # bert&BERT, 
 
     def train(self,create_new_generator):
+
+        LOGGER.info(Configuration)
+        
         LOGGER.info('\n---------------- Train Starting ----------------')
 
         for param_name, value in Configuration['model'].items():
             LOGGER.info('\t{}: {}'.format(param_name, value))
+
+        
 
         # Load training/validation data
         LOGGER.info('Load training/validation data')

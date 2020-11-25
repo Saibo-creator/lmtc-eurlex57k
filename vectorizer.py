@@ -50,14 +50,32 @@ class BERTVectorizer(Vectorizer):
 
 
 
-class HgBERTVectorizer(BERTVectorizer):
+class HgBERTVectorizer(Vectorizer):
 
-    def __init__(self):
+    def __init__(self,architecture):
         super().__init__()
+        self.architecture=architecture
 
     def load_tokenizer(self,max_sequence_size):
         hg_tokenizer = AutoTokenizer.from_pretrained("nlpaueb/legal-bert-base-uncased",max_len=max_sequence_size)
         return hg_tokenizer
+
+    def vectorize_inputs(self, sequences: List[List[str]], max_sequence_size=100, **kwargs):
+
+        bert_tokenizer=self.load_tokenizer(max_sequence_size)
+        token_indices = np.zeros((len(sequences), max_sequence_size), dtype=np.int32)
+        seg_indices = np.zeros((len(sequences), max_sequence_size), dtype=np.int32)
+        mask_indices = np.zeros((len(sequences), max_sequence_size), dtype=np.int32)
+
+        for i, tokens in enumerate(sequences):
+            bpes = bert_tokenizer.encode(' '.join([token for token in tokens]))
+            limit = min(max_sequence_size, len(bpes))
+            token_indices[i][:limit] = bpes[:limit]
+            mask_indices[i][:limit] = np.ones((limit,), dtype=np.int32)
+
+        return np.concatenate((np.reshape(token_indices, [len(sequences), max_sequence_size, 1]),
+                               np.reshape(mask_indices, [len(sequences), max_sequence_size, 1]),
+                               np.reshape(seg_indices, [len(sequences), max_sequence_size, 1])), axis=-1)
 
 
 class ELMoVectorizer(Vectorizer):

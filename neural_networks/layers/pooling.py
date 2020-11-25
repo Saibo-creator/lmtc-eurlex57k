@@ -1,4 +1,4 @@
-import keras.backend as K
+import tensorflow.keras.backend as K
 from tensorflow.keras.layers import GlobalAveragePooling1D
 
 
