@@ -208,7 +208,7 @@ class LMTC:
 
         return samples[:,:512,:],targets # bert&BERT, 
 
-    def train(self,create_new_generator):
+    def train(self,create_new_generator,not_save_new_generator):
         LOGGER.info('\n---------------- Train Starting ----------------')
 
         for param_name, value in Configuration['model'].items():
@@ -238,9 +238,11 @@ class LMTC:
                                             batch_size=Configuration['model']['batch_size'])
             
             # pdb.set_trace()
-            with open(train_val_generator_fn, "wb") as f:
-                pickle.dump((train_generator, val_generator),f)
+            if not not_save_new_generator:
+                with open(train_val_generator_fn, "wb") as f:
+                    pickle.dump((train_generator, val_generator),f)
             # pdb.set_trace()
+            print("################# generators are not saved #########################")
         
         
         
@@ -294,8 +296,9 @@ class LMTC:
             val_documents = self.load_dataset('dev',model_type)# TODO rebundary, should be in the previous pickle 
             val_samples, val_tags = self.process_dataset(val_documents)# TODO rebundary, should be in the previous pickle 
             val_samples, val_targets = self.encode_dataset(val_samples, val_tags)
-            with open(val_samples_tag_fn, "wb") as f:
-                    pickle.dump((val_documents,val_samples, val_targets),f)
+            if not not_save_new_generator:
+                with open(val_samples_tag_fn, "wb") as f:
+                        pickle.dump((val_documents,val_samples, val_targets),f)
 
 
         try:
@@ -464,9 +467,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     #首先是mandatory parameters
     parser.add_argument('--create_new_generator', action='store_true', help='create_new_generator')
+    parser.add_argument('--not_save_new_generator', action='store_true', help='not_save_new_generator')
     args = parser.parse_args()
 
-
+    not_save_new_generator=args.not_save_new_generator
     create_new_generator=args.create_new_generator
     Configuration.configure()
-    LMTC().train(create_new_generator)
+    LMTC().train(create_new_generator,not_save_new_generator)
