@@ -210,14 +210,18 @@ class LMTC:
 
         return samples[:,:512,:],targets # bert&BERT, 
 
+<<<<<<< HEAD
     def train(self,create_new_generator):
 
         LOGGER.info(Configuration)
 
+=======
+    def train(self,create_new_generator,not_save_new_generator):
+>>>>>>> 6b7918ec95aa4dab9b76575d61604f1776f8e6fd
         LOGGER.info('\n---------------- Train Starting ----------------')
-
-        for param_name, value in Configuration['model'].items():
-            LOGGER.info('\t{}: {}'.format(param_name, value))
+        for key in Configuration.keys():
+            for param_name, value in Configuration[key].items():
+                LOGGER.info('\t{}: {}'.format(param_name, value))
 
         
 
@@ -244,10 +248,19 @@ class LMTC:
             train_generator = SampleGenerator(train_samples, train_tags, experiment=self,
                                             batch_size=Configuration['model']['batch_size'])
             
+<<<<<<< HEAD
             # .
             with open(train_val_generator_fn, "wb") as f:
                 pickle.dump((train_generator, val_generator),f)
             # .
+=======
+            # pdb.set_trace()
+            if not not_save_new_generator:
+                with open(train_val_generator_fn, "wb") as f:
+                    pickle.dump((train_generator, val_generator),f)
+            # pdb.set_trace()
+            print("################# generators are not saved #########################")
+>>>>>>> 6b7918ec95aa4dab9b76575d61604f1776f8e6fd
         
         
         
@@ -301,8 +314,9 @@ class LMTC:
             val_documents = self.load_dataset('dev',model_type)# TODO rebundary, should be in the previous pickle 
             val_samples, val_tags = self.process_dataset(val_documents)# TODO rebundary, should be in the previous pickle 
             val_samples, val_targets = self.encode_dataset(val_samples, val_tags)
-            with open(val_samples_tag_fn, "wb") as f:
-                    pickle.dump((val_documents,val_samples, val_targets),f)
+            if not not_save_new_generator:
+                with open(val_samples_tag_fn, "wb") as f:
+                        pickle.dump((val_documents,val_samples, val_targets),f)
 
 
         try:
@@ -476,9 +490,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     #首先是mandatory parameters
     parser.add_argument('--create_new_generator', action='store_true', help='create_new_generator')
+    parser.add_argument('--not_save_new_generator', action='store_true', help='not_save_new_generator')
     args = parser.parse_args()
 
-
+    not_save_new_generator=args.not_save_new_generator
     create_new_generator=args.create_new_generator
     Configuration.configure()
-    LMTC().train(create_new_generator)
+    LMTC().train(create_new_generator,not_save_new_generator)

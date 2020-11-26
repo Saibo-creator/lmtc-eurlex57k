@@ -52,12 +52,12 @@ class BERTVectorizer(Vectorizer):
 
 class HgBERTVectorizer(Vectorizer):
 
-    def __init__(self,architecture):
+    def __init__(self,uri):
         super().__init__()
-        self.architecture=architecture
+        self.uri=uri
 
     def load_tokenizer(self,max_sequence_size):
-        hg_tokenizer = AutoTokenizer.from_pretrained("nlpaueb/legal-bert-base-uncased",max_len=max_sequence_size)
+        hg_tokenizer = AutoTokenizer.from_pretrained(self.uri,max_len=max_sequence_size)
         return hg_tokenizer
 
     def vectorize_inputs(self, sequences: List[List[str]], max_sequence_size=100, **kwargs):
