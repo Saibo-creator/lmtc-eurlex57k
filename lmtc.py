@@ -210,9 +210,9 @@ class LMTC:
 
     def train(self,create_new_generator,not_save_new_generator):
         LOGGER.info('\n---------------- Train Starting ----------------')
-
-        for param_name, value in Configuration['model'].items():
-            LOGGER.info('\t{}: {}'.format(param_name, value))
+        for key in Configuration.keys():
+            for param_name, value in Configuration[key].items():
+                LOGGER.info('\t{}: {}'.format(param_name, value))
 
         # Load training/validation data
         LOGGER.info('Load training/validation data')
