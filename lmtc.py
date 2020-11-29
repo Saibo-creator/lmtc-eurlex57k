@@ -210,18 +210,13 @@ class LMTC:
 
         return samples[:,:512,:],targets # bert&BERT, 
 
-<<<<<<< HEAD
-    def train(self,create_new_generator):
-
-        LOGGER.info(Configuration)
-
-=======
     def train(self,create_new_generator,not_save_new_generator):
->>>>>>> 6b7918ec95aa4dab9b76575d61604f1776f8e6fd
+        LOGGER.info(Configuration)
         LOGGER.info('\n---------------- Train Starting ----------------')
-        for key in Configuration.keys():
-            for param_name, value in Configuration[key].items():
-                LOGGER.info('\t{}: {}'.format(param_name, value))
+        for param_name, value in Configuration['model'].items():
+            LOGGER.info('\t{}: {}'.format(param_name, value))
+        for param_name, value in Configuration['sampling'].items():
+            LOGGER.info('\t{}: {}'.format(param_name, value))
 
         
 
@@ -248,19 +243,12 @@ class LMTC:
             train_generator = SampleGenerator(train_samples, train_tags, experiment=self,
                                             batch_size=Configuration['model']['batch_size'])
             
-<<<<<<< HEAD
-            # .
-            with open(train_val_generator_fn, "wb") as f:
-                pickle.dump((train_generator, val_generator),f)
-            # .
-=======
             # pdb.set_trace()
             if not not_save_new_generator:
                 with open(train_val_generator_fn, "wb") as f:
                     pickle.dump((train_generator, val_generator),f)
             # pdb.set_trace()
             print("################# generators are not saved #########################")
->>>>>>> 6b7918ec95aa4dab9b76575d61604f1776f8e6fd
         
         
         
@@ -380,7 +368,7 @@ class LMTC:
         pred_targets = (predictions > 0.5).astype('int32')
 
         template = 'R@{} : {:1.3f}   P@{} : {:1.3f}   RP@{} : {:1.3f}   NDCG@{} : {:1.3f}'
-
+        true_targets=np.array(true_targets)
         # Overall
         for labels_range, frequency, message in zip(self.margins,
                                                     ['Overall', 'Frequent', 'Few', 'Zero'],
