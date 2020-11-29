@@ -47,7 +47,7 @@ class LMTC:
             self.vectorizer2 = W2VVectorizer(w2v_model=Configuration['model']['embeddings'])
         elif 'bert' == Configuration['model']['architecture'].lower():
             self.vectorizer = BERTVectorizer()
-        elif Configuration['model']['architecture'].lower() in ['legalbert']:
+        elif Configuration['model']['architecture'].lower() in ['legalbert','roberta','legalroberta']:
             self.vectorizer = HgBERTVectorizer()
         else:
             self.vectorizer = W2VVectorizer(w2v_model=Configuration['model']['embeddings'])
@@ -308,7 +308,7 @@ class LMTC:
         with tempfile.NamedTemporaryFile(delete=True) as w_fd:
             weights_file = w_fd.name
 
-        early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+        early_stopping = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
         model_checkpoint = ModelCheckpoint(filepath=weights_file, monitor='val_loss', mode='auto',
                                            verbose=1, save_best_only=True, save_weights_only=True)
         batch_size=Configuration['model']['batch_size']

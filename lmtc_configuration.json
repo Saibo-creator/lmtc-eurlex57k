@@ -5,22 +5,22 @@
   },
   "model": {
     "cuDNN_acceleration": false,
-    "architecture": "LEGALBERT",
+    "architecture": "ROBERTA",
     "document_encoder": "grus",
     "n_hidden_layers": 1,
     "hidden_units_size": 300,
-    "dropout_rate": 0.4,
+    "dropout_rate": 0.2,
     "word_dropout_rate": 0.00,
     "lr": 1e-5,
     "batch_size": 4, 
-    "epochs": 50,
+    "epochs": 20,
     "attention_mechanism": "attention",
     "token_encoding": "word2vec",
     "embeddings": "law2vec.200d.txt",
     "bert": "bertbase",
     "bert_case":"uncased",
     "freeze_pretrained":false,
-    "uri":"nlpaueb/legal-bert-base-uncased"
+    "uri":"roberta-base"
   },
   "sampling": {
     "max_sequences_size": null,

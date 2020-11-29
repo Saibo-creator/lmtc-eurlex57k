@@ -44,8 +44,8 @@ class BERT(Layer):
             #                        trainable=True, name="{}_module".format(self.name))
             self.bert = hub.KerasLayer('https://tfhub.dev/tensorflow/bert_en_{}_L-12_H-768_A-12/3'.format(Configuration['model']['bert_case']),
             trainable=self.trainable_)
-        elif Configuration['model']['bert'] == 'legalbert':
-            self.bert = TFAutoModel.from_pretrained("nlpaueb/legal-bert-base-uncased")
+        elif Configuration['model']['architecture'].lower() in ['legalbert','roberta','legalroberta']:
+            self.bert = TFAutoModel.from_pretrained(Configuration["model"]["uri"])
         else:
             raise Exception('Unsupported bert module: "{}". Valid modules are: bertbase'.format(Configuration['model']['bert']))
 
