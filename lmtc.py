@@ -11,6 +11,7 @@ import tempfile
 import glob
 import tqdm
 import pdb
+import torch.utils.data as data_utils
 
 
 import numpy as np
@@ -47,7 +48,7 @@ class LMTC:
         elif 'bert' == Configuration['model']['architecture'].lower():
             self.vectorizer = BERTVectorizer()
         elif Configuration['model']['architecture'].lower() in ['legalbert']:
-            self.vectorizer = HgBERTVectorizer(Configuration['model']['architecture'].lower())
+            self.vectorizer = HgBERTVectorizer()
         else:
             self.vectorizer = W2VVectorizer(w2v_model=Configuration['model']['embeddings'])
         self.load_label_descriptions()
@@ -210,7 +211,11 @@ class LMTC:
 
         return samples[:,:512,:],targets # bert&BERT, 
 
-    def train(self,create_new_generator,not_save_new_generator):
+    def train(self,create_new_generator,not_save_new_generator,torch):
+        if torch:
+            LOGGER.info("########### Use Pytorch as Backend #############")
+        else:
+            LOGGER.info("########### Use Tensorflow  as Backend #############")
         LOGGER.info(Configuration)
         LOGGER.info('\n---------------- Train Starting ----------------')
         for param_name, value in Configuration['model'].items():
@@ -225,33 +230,63 @@ class LMTC:
         LOGGER.info('------------------------------')
         model_type=Configuration['model']['architecture']# BERT ,to set max length
 
-        train_val_generator_fn="data/generators/train_val_generator_{}_{}.pickle".format(model_type.lower(),Configuration['model']['batch_size'])
-       
-        if (os.path.exists(train_val_generator_fn)and (not create_new_generator)):
-            print("train val dataloaders alreay exist, load them now.")
-            with open(train_val_generator_fn, "rb") as f:
-                train_generator,val_generator = pickle.load(f) 
-        else:
 
-            val_documents = self.load_dataset('dev',model_type)
-            val_samples, val_tags = self.process_dataset(val_documents)
-            val_generator = SampleGenerator(val_samples, val_tags, experiment=self,
-                                            batch_size=Configuration['model']['batch_size'])
-            # .
-            documents = self.load_dataset('train',model_type)
-            train_samples, train_tags = self.process_dataset(documents)
-            train_generator = SampleGenerator(train_samples, train_tags, experiment=self,
-                                            batch_size=Configuration['model']['batch_size'])
+        if torch:
+            train_val_dataloader_fn="data/generators/torch_train_val_dataloaders_{}_{}.pickle".format(model_type.lower(),Configuration['model']['batch_size'])
+
+            if (os.path.exists(train_val_dataloader_fn)and (not create_new_generator)):
+                print("train val dataloaders alreay exist, load them now.")
+                with open(train_val_dataloader_fn, "rb") as f:
+                    train_dataloader,val_dataloader = pickle.load(f) 
+            else:
+
+                val_documents = self.load_dataset('dev',model_type)
+                val_samples, val_tags = self.process_dataset(val_documents)
+                val_dataset = data_utils.TensorDataset(val_samples, val_tags)
+                val_dataloader = data_utils.DataLoader(val_dataset, batch_size=Configuration['model']['batch_size'], shuffle=True)
+                # .
+                train_documents = self.load_dataset('train',model_type)
+                train_samples, train_tags = self.process_dataset(train_documents)
+                train_dataset = data_utils.TensorDataset(train_samples, train_tags)
+                train_dataloader = data_utils.DataLoader(train_dataset, batch_size=Configuration['model']['batch_size'], shuffle=True)
+                
+                # pdb.set_trace()
+                if not not_save_new_generator:
+                    with open(train_val_dataloader_fn, "wb") as f:
+                        pickle.dump((train_dataloader, val_dataloader),f)
+                    print("################# generators are saved #########################")
+                # pdb.set_trace()
+                else:
+                    print("################# generators are not saved #########################")
             
-            # pdb.set_trace()
-            if not not_save_new_generator:
-                with open(train_val_generator_fn, "wb") as f:
-                    pickle.dump((train_generator, val_generator),f)
-            # pdb.set_trace()
-            print("################# generators are not saved #########################")
+        else:
+            train_val_generator_fn="data/generators/train_val_generator_{}_{}.pickle".format(model_type.lower(),Configuration['model']['batch_size'])
         
-        
-        
+            if (os.path.exists(train_val_generator_fn)and (not create_new_generator)):
+                print("train val dataloaders alreay exist, load them now.")
+                with open(train_val_generator_fn, "rb") as f:
+                    train_generator,val_generator = pickle.load(f) 
+            else:
+
+                val_documents = self.load_dataset('dev',model_type)
+                val_samples, val_tags = self.process_dataset(val_documents)
+                val_generator = SampleGenerator(val_samples, val_tags, experiment=self,
+                                                batch_size=Configuration['model']['batch_size'])
+                # .
+                train_documents = self.load_dataset('train',model_type)
+                train_samples, train_tags = self.process_dataset(train_documents)
+                train_generator = SampleGenerator(train_samples, train_tags, experiment=self,
+                                                batch_size=Configuration['model']['batch_size'])
+                
+                # pdb.set_trace()
+                if not not_save_new_generator:
+                    with open(train_val_generator_fn, "wb") as f:
+                        pickle.dump((train_generator, val_generator),f)
+                # pdb.set_trace()
+                print("################# generators are not saved #########################")
+            
+            
+
         
         # strategy = tf.distribute.MirroredStrategy()
         # with strategy.scope():
@@ -348,10 +383,22 @@ class LMTC:
         LOGGER.info('Load test data')
         LOGGER.info('------------------------------')
 
-        test_documents = self.load_dataset('test',model_type)
-        limit = len(test_documents) % Configuration['model']['batch_size'] if Configuration['model']['architecture'] == 'BERT' else 0
-        test_samples, test_tags = self.process_dataset(test_documents if not limit else test_documents[:-limit])
-        test_samples, test_targets = self.encode_dataset(test_samples, test_tags)
+        # test_documents = self.load_dataset('test',model_type)
+        # limit = len(test_documents) % Configuration['model']['batch_size'] if Configuration['model']['architecture'] == 'BERT' else 0
+        # test_samples, test_tags = self.process_dataset(test_documents if not limit else test_documents[:-limit])
+        # test_samples, test_targets = self.encode_dataset(test_samples, test_tags)
+        test_samples_tag_fn="data/generators/test_samples_tag_{}_{}.pickle".format(model_type.lower(),Configuration['model']['batch_size'])
+        if (os.path.exists(test_samples_tag_fn)and (not create_new_generator)):
+            print("test samples and test tags alreay exist, load them now.")
+            with open(test_samples_tag_fn, "rb") as f:
+                test_documents,test_samples, test_targets = pickle.load(f) 
+        else:
+            test_documents = self.load_dataset('test',model_type)# TODO rebundary, should be in the previous pickle 
+            test_samples, test_tags = self.process_dataset(test_documents)# TODO rebundary, should be in the previous pickle 
+            test_samples, test_targets = self.encode_dataset(test_samples, test_tags)
+            if not not_save_new_generator:
+                with open(test_samples_tag_fn, "wb") as f:
+                        pickle.dump((test_documents,test_samples, test_targets),f)
 
         self.calculate_performance(model=network.model, true_samples=test_samples, true_targets=test_targets)
 
@@ -479,9 +526,11 @@ if __name__ == '__main__':
     #首先是mandatory parameters
     parser.add_argument('--create_new_generator', action='store_true', help='create_new_generator')
     parser.add_argument('--not_save_new_generator', action='store_true', help='not_save_new_generator')
+    parser.add_argument('--torch', action='store_true', help='')
     args = parser.parse_args()
 
     not_save_new_generator=args.not_save_new_generator
     create_new_generator=args.create_new_generator
+    torch=args.torch
     Configuration.configure()
-    LMTC().train(create_new_generator,not_save_new_generator)
+    LMTC().train(create_new_generator,not_save_new_generator,torch)

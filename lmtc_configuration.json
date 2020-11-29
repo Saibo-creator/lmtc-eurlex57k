@@ -11,7 +11,7 @@
     "hidden_units_size": 300,
     "dropout_rate": 0.4,
     "word_dropout_rate": 0.00,
-    "lr": 1e-3,
+    "lr": 1e-5,
     "batch_size": 4, 
     "epochs": 50,
     "attention_mechanism": "attention",
@@ -19,11 +19,12 @@
     "embeddings": "law2vec.200d.txt",
     "bert": "bertbase",
     "bert_case":"uncased",
-    "freeze_pretrained":true
+    "freeze_pretrained":false,
+    "uri":"nlpaueb/legal-bert-base-uncased"
   },
   "sampling": {
     "max_sequences_size": null,
-    "max_sequence_size": 5000,
+    "max_sequence_size": 512,
     "max_label_size": 15,
     "few_threshold": 50,
     "hierarchical": false,

@@ -7,6 +7,7 @@ from data import VECTORS_DIR, DATA_DIR
 from configuration import Configuration
 from transformers import AutoTokenizer
 from neural_networks.layers.bert import BERTTextEncoder
+import pdb
 
 
 class Vectorizer(object):
@@ -52,9 +53,9 @@ class BERTVectorizer(Vectorizer):
 
 class HgBERTVectorizer(Vectorizer):
 
-    def __init__(self,uri):
+    def __init__(self):
         super().__init__()
-        self.uri=uri
+        self.uri=Configuration["model"]["uri"]
 
     def load_tokenizer(self,max_sequence_size):
         hg_tokenizer = AutoTokenizer.from_pretrained(self.uri,max_len=max_sequence_size)
@@ -68,7 +69,7 @@ class HgBERTVectorizer(Vectorizer):
         mask_indices = np.zeros((len(sequences), max_sequence_size), dtype=np.int32)
 
         for i, tokens in enumerate(sequences):
-            bpes = bert_tokenizer.encode(' '.join([token for token in tokens]))
+            bpes = bert_tokenizer.encode(' '.join([token for token in tokens]),padding='max_length', truncation=True, max_length=max_sequence_size)
             limit = min(max_sequence_size, len(bpes))
             token_indices[i][:limit] = bpes[:limit]
             mask_indices[i][:limit] = np.ones((limit,), dtype=np.int32)
