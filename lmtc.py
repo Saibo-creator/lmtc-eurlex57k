@@ -12,7 +12,10 @@ import glob
 import tqdm
 import pdb
 import torch.utils.data as data_utils
-
+from torch.optim import AdamW
+from torch.nn import BCEWithLogitsLoss, BCELoss
+from transformers import  AutoModelForSequenceClassification
+from tqdm.auto import trange
 
 import numpy as np
 from tempfile import TemporaryFile, NamedTemporaryFile
@@ -258,10 +261,18 @@ class LMTC:
             val_samples, val_tags = self.process_dataset(val_documents)
             val_dataset = data_utils.TensorDataset(val_samples, val_tags)
             val_dataloader = data_utils.DataLoader(val_dataset, batch_size=Configuration['model']['batch_size'], shuffle=True)
+            print("finished vectorize val")
 
             train_samples, train_tags = self.process_dataset(train_documents)
             train_dataset = data_utils.TensorDataset(train_samples, train_tags)
             train_dataloader = data_utils.DataLoader(train_dataset, batch_size=Configuration['model']['batch_size'], shuffle=True)
+            print("finished vectorize train")
+
+            test_samples, test_tags = self.process_dataset(test_documents)
+            test_dataset = data_utils.TensorDataset(test_samples, test_tags)
+            test_dataloader = data_utils.DataLoader(test_dataset, batch_size=Configuration['model']['batch_size'], shuffle=True)
+            print("finished vectorize test")
+
 
         else:# tensorflow
             start_time = time.time()
@@ -285,6 +296,131 @@ class LMTC:
             LOGGER.info('\nTotal vectorization Time: {} hours'.format(total_time/3600))
             
             
+        if torch:
+            NUM_LABELS = list(self.label_ids.keys())
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            n_gpu = torch.cuda.device_count()
+            print("torch.cuda.is_available: ",torch.cuda.is_available(),"with",n_gpu)
+
+            model=AutoModelForSequenceClassification.from_pretrained(Configuration['model']['uri'])
+
+            parallel_model = torch.nn.DataParallel(model) # Encapsulate the model
+            parallel_model.cuda()
+
+            # setting custom optimization parameters. You may implement a scheduler here as well.
+            param_optimizer = list(model.named_parameters())
+            no_decay = ['bias', 'gamma', 'beta']
+            optimizer_grouped_parameters = [
+                {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)],
+                'weight_decay_rate': 0.01},
+                {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)],
+                'weight_decay_rate': 0.0}
+            ]
+
+            optimizer = AdamW(optimizer_grouped_parameters,lr=Configuration['model']['lr'],correct_bias=True)
+            # Store our loss and accuracy for plotting
+            train_loss_set = []
+
+            # Number of training epochs (authors recommend between 2 and 4)
+            epochs = Configuration['model']['epochs']
+
+            for epoch__ in trange(epochs, desc="Epoch"):
+
+                # Training
+
+                # Set our model to training mode (as opposed to evaluation mode)
+                parallel_model.train()
+
+                # Tracking variables
+                tr_loss = 0 #running loss
+                nb_tr_examples, nb_tr_steps = 0, 0
+
+
+
+                # Train the data for one epoch
+                for step, batch in enumerate(train_dataloader):
+                    # Add batch to GPU
+                    batch = tuple(t.to(device) for t in batch)
+                    # Unpack the inputs from our dataloader
+                    b_input_ids, b_input_mask, b_labels, b_token_types = batch
+                    # Clear out the gradients (by default they accumulate)
+                    optimizer.zero_grad()
+
+                    # # Forward pass for multiclass classification
+                    # outputs = model(b_input_ids, token_type_ids=None, attention_mask=b_input_mask, labels=b_labels)
+                    # loss = outputs[0]
+                    # logits = outputs[1]
+
+                    # Forward pass for multilabel classification
+                    outputs = parallel_model(b_input_ids, token_type_ids=None, attention_mask=b_input_mask)
+                    logits = outputs[0]
+                    loss_func = BCEWithLogitsLoss() 
+                    loss = loss_func(logits.view(-1,NUM_LABELS),b_labels.type_as(logits).view(-1,NUM_LABELS)) #convert labels to float for calculation
+                    # loss_func = BCELoss() 
+                    # loss = loss_func(torch.sigmoid(logits.view(-1,NUM_LABELS)),b_labels.type_as(logits).view(-1,NUM_LABELS)) #convert labels to float for calculation
+                    train_loss_set.append(loss.item())    
+
+                    # Backward pass
+                    loss.mean().backward()
+                    # Update parameters and take a step using the computed gradient
+                    optimizer.step()
+                    # scheduler.step()
+                    # Update tracking variables
+                    tr_loss += loss.item()
+                    nb_tr_examples += b_input_ids.size(0)
+                    nb_tr_steps += 1
+
+                    print("Train loss: {}".format(tr_loss/nb_tr_steps))
+
+                ###############################################################################
+
+                # Validation
+
+                # Put model in evaluation mode to evaluate loss on the validation set
+                parallel_model.eval()
+
+                # Variables to gather full output
+                logit_preds,true_labels,pred_labels,tokenized_texts = [],[],[],[]
+
+                # Predict
+                for i, batch in enumerate(val_dataloader):
+                    batch = tuple(t.to(device) for t in batch)
+                    # Unpack the inputs from our dataloader
+                    b_input_ids, b_input_mask, b_labels, b_token_types = batch
+                    with torch.no_grad():
+                        # Forward pass
+                        outs = parallel_model(b_input_ids, token_type_ids=None, attention_mask=b_input_mask)
+                        b_logit_pred = outs[0]
+                        pred_label = torch.sigmoid(b_logit_pred)
+
+                        b_logit_pred = b_logit_pred.detach().cpu().numpy()
+                        pred_label = pred_label.to('cpu').numpy()
+                        b_labels = b_labels.to('cpu').numpy()
+
+                    tokenized_texts.append(b_input_ids)
+                    logit_preds.append(b_logit_pred)
+                    true_labels.append(b_labels)
+                    pred_labels.append(pred_label)
+
+                # Flatten outputs
+                pred_labels = [item for sublist in pred_labels for item in sublist]
+                true_labels = [item for sublist in true_labels for item in sublist]
+
+                # Calculate Accuracy
+                threshold = 0.50
+                pred_bools = [pl>threshold for pl in pred_labels]
+                true_bools = [tl==1 for tl in true_labels]
+                val_f1_accuracy = f1_score(true_bools,pred_bools,average='micro')*100
+                val_flat_accuracy = accuracy_score(true_bools, pred_bools)*100
+
+                print('F1 Validation Accuracy: ', val_f1_accuracy)
+                print('Flat Validation Accuracy: ', val_flat_accuracy)
+
+
+            torch.save(model.state_dict(), '/mnt/localdata/geng/model/lmtc_models/downstream/multiLabelClassification/{0}/clf_{0}'.format(model_name))
+
+
+
 
         
         # strategy = tf.distribute.MirroredStrategy()
@@ -348,16 +484,15 @@ class LMTC:
         LOGGER.info('Calculate performance on valid data')
         LOGGER.info('------------------------------')
 
-
-
         self.calculate_performance(model=network.model, true_samples=val_samples, true_targets=val_targets)
-
         LOGGER.info('Calculate performance on test data')
         LOGGER.info('------------------------------')
-
-
-
         self.calculate_performance(model=network.model, true_samples=test_samples, true_targets=test_targets)
+
+
+
+
+
 
         total_time = time.time() - start_time
         LOGGER.info('\nTotal Training Time: {} hours'.format(total_time/3600))
