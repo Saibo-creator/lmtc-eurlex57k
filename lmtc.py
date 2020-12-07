@@ -567,7 +567,7 @@ class Calculate_performance(Callback):
     def __init__(self, true_samples, true_targets, class_):
         super(Calculate_performance, self).__init__()
         self.true_samples = true_samples
-        self.true_targets=MultiLabelBinarizer(classes=class_).fit_transform(true_targets)
+        self.true_targets=np.array(MultiLabelBinarizer(classes=class_).fit_transform(true_targets))
 
     def on_epoch_end(self, epoch, logs=None):
         

@@ -53,7 +53,7 @@ class DocumentClassification:
         if Configuration['sampling']['hierarchical']:
             self._compile_hans(shape=shape, n_hidden_layers=n_hidden_layers, hidden_units_size=hidden_units_size,
                                dropout_rate=dropout_rate, word_dropout_rate=word_dropout_rate, lr=lr)
-        elif Configuration['model']['architecture'].lower() in ['bert','legalbert','roberta','legalroberta']:
+        elif Configuration['model']['architecture'].lower() in ['bert','legalbert','roberta','legalroberta',"hf"]:
             self._compile_bert(shape=shape, dropout_rate=dropout_rate, lr=lr, freeze_pretrained=freeze_pretrained)
         elif Configuration['model']['attention_mechanism']:
             self._compile_bigrus_attention(shape=shape, n_hidden_layers=n_hidden_layers, hidden_units_size=hidden_units_size,
