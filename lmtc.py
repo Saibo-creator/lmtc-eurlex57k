@@ -11,6 +11,7 @@ import tempfile
 import glob
 import tqdm
 import pdb
+import torch
 import torch.utils.data as data_utils
 from torch.optim import AdamW
 from torch.nn import BCEWithLogitsLoss, BCELoss
@@ -48,12 +49,13 @@ class LMTC:
         if 'elmo' in Configuration['model']['token_encoding']:
             self.vectorizer = ELMoVectorizer()
             self.vectorizer2 = W2VVectorizer(w2v_model=Configuration['model']['embeddings'])
-        elif 'bert' == Configuration['model']['architecture'].lower():
+        elif Configuration['model']['architecture'].lower() in ['bert']:
             self.vectorizer = BERTVectorizer()
-        elif Configuration['model']['architecture'].lower() in ['legalbert','roberta','legalroberta']:
+        elif Configuration['model']['architecture'].lower() in ['legalbert','roberta','legalroberta',"hf"]:
             self.vectorizer = HgBERTVectorizer()
+            print("Loaded tokenizer from ",Configuration["model"]["uri"])
         else:
-            self.vectorizer = W2VVectorizer(w2v_model=Configuration['model']['embeddings'])
+            raise ValueError('A very specific bad thing happened')
         self.load_label_descriptions()
 
     def load_label_descriptions(self):
@@ -194,7 +196,7 @@ class LMTC:
                         targets[i][self.label_ids[tag]] = 1
             samples = np.asarray(samples)
         else:
-            samples = self.vectorizer.vectorize_inputs(sequences=sequences,
+            samples = self.vectorizer.vectorize_inputs_(sequences=sequences,
                                                        max_sequence_size=Configuration['sampling']['max_sequence_size'])
 
             if 'elmo' in Configuration['model']['token_encoding']:
@@ -211,11 +213,11 @@ class LMTC:
 
         if 'elmo' in Configuration['model']['token_encoding']:
             return [samples, samples2], targets
+            
+        return samples,targets # bert&BERT, 
 
-        return samples[:,:512,:],targets # bert&BERT, 
-
-    def train(self,create_new_generator,not_save_new_generator,torch):
-        if torch:
+    def train(self,create_new_generator,not_save_new_generator,use_torch):
+        if use_torch:
             LOGGER.info("########### Use Pytorch as Backend #############")
         else:
             LOGGER.info("########### Use Tensorflow  as Backend #############")
@@ -255,27 +257,39 @@ class LMTC:
             with open(val_documents_fn, "wb") as f:
                 pickle.dump(val_documents,f)
 
+        start_time = time.time()
 
-
-        if torch:
+        if use_torch:
             val_samples, val_tags = self.process_dataset(val_documents)
-            val_dataset = data_utils.TensorDataset(val_samples, val_tags)
+            val_samples, val_targets = self.encode_dataset(val_samples, val_tags)
+            input_ids = val_samples['input_ids'] 
+            attention_masks = val_samples['attention_mask'] 
+            # val_inputs = torch.tensor(input_ids)
+            # val_masks = torch.tensor(attention_masks)
+            val_targets=torch.tensor(val_targets)
+            val_dataset = data_utils.TensorDataset(input_ids,attention_masks, val_targets)
             val_dataloader = data_utils.DataLoader(val_dataset, batch_size=Configuration['model']['batch_size'], shuffle=True)
             print("finished vectorize val")
 
-            train_samples, train_tags = self.process_dataset(train_documents)
-            train_dataset = data_utils.TensorDataset(train_samples, train_tags)
-            train_dataloader = data_utils.DataLoader(train_dataset, batch_size=Configuration['model']['batch_size'], shuffle=True)
-            print("finished vectorize train")
+            # train_samples, train_tags = self.process_dataset(train_documents)
+            # train_samples, train_targets = self.encode_dataset(train_samples, train_tags)
+            # train_samples=torch.tensor(train_samples)
+            # train_targets=torch.tensor(train_targets)
+            # train_dataset = data_utils.TensorDataset(train_samples, train_targets)
+            # train_dataloader = data_utils.DataLoader(train_dataset, batch_size=Configuration['model']['batch_size'], shuffle=True)
+            # print("finished vectorize train")
 
-            test_samples, test_tags = self.process_dataset(test_documents)
-            test_dataset = data_utils.TensorDataset(test_samples, test_tags)
-            test_dataloader = data_utils.DataLoader(test_dataset, batch_size=Configuration['model']['batch_size'], shuffle=True)
-            print("finished vectorize test")
+            # test_samples, test_tags = self.process_dataset(test_documents)
+            # test_samples, test_targets = self.encode_dataset(test_samples, test_tags)
+            # test_samples=torch.tensor(test_samples)
+            # test_targets=torch.tensor(test_targets)
+            # test_dataset = data_utils.TensorDataset(test_samples, test_targets)
+            # test_dataloader = data_utils.DataLoader(test_dataset, batch_size=Configuration['model']['batch_size'], shuffle=True)
+            # print("finished vectorize test")
 
 
         else:# tensorflow
-            start_time = time.time()
+            
             val_samples, val_tags = self.process_dataset(val_documents)
             val_generator = SampleGenerator(val_samples, val_tags, experiment=self,
                                             batch_size=Configuration['model']['batch_size'])
@@ -292,11 +306,12 @@ class LMTC:
             test_samples, test_targets = self.encode_dataset(test_samples, test_tags)
             print("finished vectorize test")
 
-            total_time = time.time() - start_time
-            LOGGER.info('\nTotal vectorization Time: {} hours'.format(total_time/3600))
+        total_time = time.time() - start_time
+        LOGGER.info('\nTotal vectorization Time: {} hours'.format(total_time/3600))
             
             
-        if torch:
+        if use_torch:
+            LOGGER.info('----------Compile Pytorch model--------------------')
             NUM_LABELS = list(self.label_ids.keys())
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             n_gpu = torch.cuda.device_count()
@@ -304,7 +319,8 @@ class LMTC:
 
             model=AutoModelForSequenceClassification.from_pretrained(Configuration['model']['uri'])
 
-            parallel_model = torch.nn.DataParallel(model) # Encapsulate the model
+            # parallel_model = torch.nn.DataParallel(model) # Encapsulate the model
+            parallel_model=model
             parallel_model.cuda()
 
             # setting custom optimization parameters. You may implement a scheduler here as well.
@@ -317,7 +333,7 @@ class LMTC:
                 'weight_decay_rate': 0.0}
             ]
 
-            optimizer = AdamW(optimizer_grouped_parameters,lr=Configuration['model']['lr'],correct_bias=True)
+            optimizer = AdamW(optimizer_grouped_parameters,lr=Configuration['model']['lr'])
             # Store our loss and accuracy for plotting
             train_loss_set = []
 
@@ -333,16 +349,20 @@ class LMTC:
 
                 # Tracking variables
                 tr_loss = 0 #running loss
-                nb_tr_examples, nb_tr_steps = 0, 0
+                nb_tr_steps = 0
 
 
 
                 # Train the data for one epoch
-                for step, batch in enumerate(train_dataloader):
+                for step, batch in enumerate(val_dataloader):
                     # Add batch to GPU
                     batch = tuple(t.to(device) for t in batch)
                     # Unpack the inputs from our dataloader
-                    b_input_ids, b_input_mask, b_labels, b_token_types = batch
+                    train_input_ids,train_input_mask, train_tags = batch
+                    """
+                    train_samples=torch.tensor(train_samples).to(torch.int64)
+                    train_tags=torch.tensor(train_tags).to(torch.int64)
+                    """
                     # Clear out the gradients (by default they accumulate)
                     optimizer.zero_grad()
 
@@ -350,12 +370,12 @@ class LMTC:
                     # outputs = model(b_input_ids, token_type_ids=None, attention_mask=b_input_mask, labels=b_labels)
                     # loss = outputs[0]
                     # logits = outputs[1]
-
+                    pdb.set_trace()
                     # Forward pass for multilabel classification
-                    outputs = parallel_model(b_input_ids, token_type_ids=None, attention_mask=b_input_mask)
+                    outputs =  parallel_model(train_input_ids)
                     logits = outputs[0]
                     loss_func = BCEWithLogitsLoss() 
-                    loss = loss_func(logits.view(-1,NUM_LABELS),b_labels.type_as(logits).view(-1,NUM_LABELS)) #convert labels to float for calculation
+                    loss = loss_func(logits.view(-1,NUM_LABELS),train_tags.type_as(logits).view(-1,NUM_LABELS)) #convert labels to float for calculation
                     # loss_func = BCELoss() 
                     # loss = loss_func(torch.sigmoid(logits.view(-1,NUM_LABELS)),b_labels.type_as(logits).view(-1,NUM_LABELS)) #convert labels to float for calculation
                     train_loss_set.append(loss.item())    
@@ -367,7 +387,6 @@ class LMTC:
                     # scheduler.step()
                     # Update tracking variables
                     tr_loss += loss.item()
-                    nb_tr_examples += b_input_ids.size(0)
                     nb_tr_steps += 1
 
                     print("Train loss: {}".format(tr_loss/nb_tr_steps))
@@ -380,114 +399,125 @@ class LMTC:
                 parallel_model.eval()
 
                 # Variables to gather full output
-                logit_preds,true_labels,pred_labels,tokenized_texts = [],[],[],[]
+                logit_preds,true_labels,pred_labels = [],[],[]
 
                 # Predict
                 for i, batch in enumerate(val_dataloader):
                     batch = tuple(t.to(device) for t in batch)
                     # Unpack the inputs from our dataloader
-                    b_input_ids, b_input_mask, b_labels, b_token_types = batch
+                    val_samples, val_tags = batch
+                    val_samples=torch.tensor(val_samples).to(torch.int64)
+                    val_tags=torch.tensor(val_tags).to(torch.int64)
                     with torch.no_grad():
                         # Forward pass
-                        outs = parallel_model(b_input_ids, token_type_ids=None, attention_mask=b_input_mask)
+                        outs = parallel_model(val_samples, val_tags)
                         b_logit_pred = outs[0]
-                        pred_label = torch.sigmoid(b_logit_pred)
+                        val_predictions = torch.sigmoid(b_logit_pred)
 
                         b_logit_pred = b_logit_pred.detach().cpu().numpy()
-                        pred_label = pred_label.to('cpu').numpy()
-                        b_labels = b_labels.to('cpu').numpy()
+                        val_predictions = val_predictions.to('cpu').numpy()
+                        val_tags = val_tags.to('cpu').numpy()
 
-                    tokenized_texts.append(b_input_ids)
+                    # tokenized_texts.append(b_input_ids)
                     logit_preds.append(b_logit_pred)
-                    true_labels.append(b_labels)
-                    pred_labels.append(pred_label)
+                    true_labels.append(val_tags)
+                    pred_labels.append(val_predictions)
 
                 # Flatten outputs
-                pred_labels = [item for sublist in pred_labels for item in sublist]
-                true_labels = [item for sublist in true_labels for item in sublist]
+                val_predictions = [predication for batch in pred_labels for predication in batch]
+                val_targets = [label for batch in true_labels for label in batch]
 
-                # Calculate Accuracy
-                threshold = 0.50
-                pred_bools = [pl>threshold for pl in pred_labels]
-                true_bools = [tl==1 for tl in true_labels]
-                val_f1_accuracy = f1_score(true_bools,pred_bools,average='micro')*100
-                val_flat_accuracy = accuracy_score(true_bools, pred_bools)*100
+                ###############################  eval  phase  ######################################
 
-                print('F1 Validation Accuracy: ', val_f1_accuracy)
-                print('Flat Validation Accuracy: ', val_flat_accuracy)
+                LOGGER.info('Calculate performance on valid data')
+                LOGGER.info('------------------------------')
+                # val_predictions = model.predict(val_samples,
+                #                             batch_size=Configuration['model']['batch_size']
+                #                             if Configuration['model']['architecture'] == 'BERT'
+                #                                 or Configuration['model']['token_encoding'] == 'elmo' else None)
 
-
-            torch.save(model.state_dict(), '/mnt/localdata/geng/model/lmtc_models/downstream/multiLabelClassification/{0}/clf_{0}'.format(model_name))
+                self.calculate_performance(predictions=val_predictions, true_targets=val_targets)
 
 
 
 
-        
-        # strategy = tf.distribute.MirroredStrategy()
-        # with strategy.scope():
-        
-        LOGGER.info('Compile neural network')
-        LOGGER.info('------------------------------')
-        if 'label' in Configuration['model']['architecture'].lower():
-            network = LabelDrivenClassification(self.label_terms_ids)
-        else:
-            network = DocumentClassification(self.label_terms_ids)
-
-        network.compile(n_hidden_layers=Configuration['model']['n_hidden_layers'],
-                        hidden_units_size=Configuration['model']['hidden_units_size'],
-                        dropout_rate=Configuration['model']['dropout_rate'],
-                        word_dropout_rate=Configuration['model']['word_dropout_rate'],
-                        lr=Configuration['model']['lr'],freeze_pretrained=Configuration["model"]["freeze_pretrained"])
-
-        network.model.summary(line_length=200, print_fn=LOGGER.info)
-
-        with tempfile.NamedTemporaryFile(delete=True) as w_fd:
-            weights_file = w_fd.name
-
-        early_stopping = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
-        model_checkpoint = ModelCheckpoint(filepath=weights_file, monitor='val_loss', mode='auto',
-                                           verbose=1, save_best_only=True, save_weights_only=True)
-        batch_size=Configuration['model']['batch_size']
-        
-        # Fit model
-        LOGGER.info('Fit model')
-        LOGGER.info('-----------')
-        start_time = time.time()
-
-
-
-        try:
-            fit_history = network.model.fit_generator(train_generator,
-                                                    validation_data=val_generator,
-                                                    workers=os.cpu_count()//2,
-                                                    steps_per_epoch=len(train_generator),
-                                                    epochs=Configuration['model']['epochs'],
-                                                    callbacks=[early_stopping,Calculate_performance(val_samples, val_targets,list(self.label_ids.keys()))],
-                                                    # callbacks=[early_stopping, model_checkpoint,Calculate_performance(val_samples, val_targets)],
-                                                        verbose = True)
-            best_epoch = np.argmin(fit_history.history['val_loss']) + 1
-            n_epochs = len(fit_history.history['val_loss'])
-            val_loss_per_epoch = '- ' + ' '.join('-' if fit_history.history['val_loss'][i] < np.min(fit_history.history['val_loss'][:i])
-                                                else '+' for i in range(1, len(fit_history.history['val_loss'])))
-            LOGGER.info('\nBest epoch: {}/{}'.format(best_epoch, n_epochs))
-            LOGGER.info('Val loss per epoch: {}\n'.format(val_loss_per_epoch))
-
-        except KeyboardInterrupt:
-            LOGGER.info("skip rest of training")
+        else:# Tensorflow as backend
+            # strategy = tf.distribute.MirroredStrategy()
+            # with strategy.scope():
             
-        network.model.save(os.path.join(MODELS_DIR, '{}.h5'.format('{}_{}_{}'.format(
-            Configuration['task']['dataset'].upper(), 'HIERARCHICAL' if Configuration['sampling']['hierarchical'] else 'FLAT',
-            Configuration['model']['architecture'].upper()))))
+            LOGGER.info('Compile neural network')
+            LOGGER.info('------------------------------')
+            if 'label' in Configuration['model']['architecture'].lower():
+                network = LabelDrivenClassification(self.label_terms_ids)
+            else:
+                network = DocumentClassification(self.label_terms_ids)
 
-        del train_generator
+            network.compile(n_hidden_layers=Configuration['model']['n_hidden_layers'],
+                            hidden_units_size=Configuration['model']['hidden_units_size'],
+                            dropout_rate=Configuration['model']['dropout_rate'],
+                            word_dropout_rate=Configuration['model']['word_dropout_rate'],
+                            lr=Configuration['model']['lr'],freeze_pretrained=Configuration["model"]["freeze_pretrained"])
 
-        LOGGER.info('Calculate performance on valid data')
-        LOGGER.info('------------------------------')
+            network.model.summary(line_length=200, print_fn=LOGGER.info)
 
-        self.calculate_performance(model=network.model, true_samples=val_samples, true_targets=val_targets)
-        LOGGER.info('Calculate performance on test data')
-        LOGGER.info('------------------------------')
-        self.calculate_performance(model=network.model, true_samples=test_samples, true_targets=test_targets)
+            with tempfile.NamedTemporaryFile(delete=True) as w_fd:
+                weights_file = w_fd.name
+
+            early_stopping = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
+            model_checkpoint = ModelCheckpoint(filepath=weights_file, monitor='val_loss', mode='auto',
+                                            verbose=1, save_best_only=True, save_weights_only=True)
+            batch_size=Configuration['model']['batch_size']
+            
+            # Fit model
+            LOGGER.info('Fit model')
+            LOGGER.info('-----------')
+            start_time = time.time()
+
+
+
+            try:
+                fit_history = network.model.fit_generator(train_generator,
+                                                        validation_data=val_generator,
+                                                        workers=os.cpu_count()//2,
+                                                        steps_per_epoch=len(train_generator),
+                                                        epochs=Configuration['model']['epochs'],
+                                                        callbacks=[early_stopping,Calculate_performance(val_samples, val_targets,list(self.label_ids.keys()))],
+                                                        # callbacks=[early_stopping, model_checkpoint,Calculate_performance(val_samples, val_targets)],
+                                                            verbose = True)
+                best_epoch = np.argmin(fit_history.history['val_loss']) + 1
+                n_epochs = len(fit_history.history['val_loss'])
+                val_loss_per_epoch = '- ' + ' '.join('-' if fit_history.history['val_loss'][i] < np.min(fit_history.history['val_loss'][:i])
+                                                    else '+' for i in range(1, len(fit_history.history['val_loss'])))
+                LOGGER.info('\nBest epoch: {}/{}'.format(best_epoch, n_epochs))
+                LOGGER.info('Val loss per epoch: {}\n'.format(val_loss_per_epoch))
+
+            except KeyboardInterrupt:
+                LOGGER.info("skip rest of training")
+                
+            network.model.save(os.path.join(MODELS_DIR, '{}.h5'.format('{}_{}_{}'.format(
+                Configuration['task']['dataset'].upper(), 'HIERARCHICAL' if Configuration['sampling']['hierarchical'] else 'FLAT',
+                Configuration['model']['architecture'].upper()))))
+
+            del train_generator
+
+            ###############################  eval  phase  ######################################
+
+            LOGGER.info('Calculate performance on valid data')
+            LOGGER.info('------------------------------')
+            val_predictions = model.predict(val_samples,
+                                        batch_size=Configuration['model']['batch_size']
+                                        if Configuration['model']['architecture'] == 'BERT'
+                                            or Configuration['model']['token_encoding'] == 'elmo' else None)
+
+            self.calculate_performance(predictions=val_predictions, true_targets=val_targets)
+            
+            LOGGER.info('Calculate performance on test data')
+            LOGGER.info('------------------------------')
+            test_predictions = model.predict(test_samples,
+                                batch_size=Configuration['model']['batch_size']
+                                if Configuration['model']['architecture'] == 'BERT'
+                                    or Configuration['model']['token_encoding'] == 'elmo' else None)
+            self.calculate_performance(predictions=test_predictions, true_targets=test_targets)
 
 
 
@@ -497,13 +527,7 @@ class LMTC:
         total_time = time.time() - start_time
         LOGGER.info('\nTotal Training Time: {} hours'.format(total_time/3600))
 
-    def calculate_performance(self, model, true_samples, true_targets,verbose=True):
-
-        predictions = model.predict(true_samples,
-                                            batch_size=Configuration['model']['batch_size']
-                                            if Configuration['model']['architecture'] == 'BERT'
-                                               or Configuration['model']['token_encoding'] == 'elmo' else None)
-
+    def calculate_performance(self, predictions, true_targets,verbose=True):
         pred_targets = (predictions > 0.5).astype('int32')
 
         template = 'R@{} : {:1.3f}   P@{} : {:1.3f}   RP@{} : {:1.3f}   NDCG@{} : {:1.3f}'
@@ -618,11 +642,11 @@ if __name__ == '__main__':
     #首先是mandatory parameters
     parser.add_argument('--create_new_generator', action='store_true', help='create_new_generator')
     parser.add_argument('--not_save_new_generator', action='store_true', help='not_save_new_generator')
-    parser.add_argument('--torch', action='store_true', help='')
+    parser.add_argument('--t', action='store_true', help='use torch as backend')
     args = parser.parse_args()
 
     not_save_new_generator=args.not_save_new_generator
     create_new_generator=args.create_new_generator
-    torch=args.torch
+    use_torch=args.t
     Configuration.configure()
-    LMTC().train(create_new_generator,not_save_new_generator,torch)
+    LMTC().train(create_new_generator,not_save_new_generator,use_torch)

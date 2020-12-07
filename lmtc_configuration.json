@@ -5,22 +5,22 @@
   },
   "model": {
     "cuDNN_acceleration": false,
-    "architecture": "ROBERTA",
+    "architecture": "HF",
     "document_encoder": "grus",
     "n_hidden_layers": 1,
     "hidden_units_size": 300,
     "dropout_rate": 0.2,
     "word_dropout_rate": 0.00,
     "lr": 1e-5,
-    "batch_size": 4, 
+    "batch_size": 2, 
     "epochs": 20,
     "attention_mechanism": "attention",
-    "token_encoding": "word2vec",
-    "embeddings": "law2vec.200d.txt",
+    "token_encoding": "-",
+    "embeddings": "-",
     "bert": "bertbase",
     "bert_case":"uncased",
     "freeze_pretrained":false,
-    "uri":"roberta-base"
+    "uri":"prajjwal1/bert-tiny"
   },
   "sampling": {
     "max_sequences_size": null,

@@ -44,7 +44,7 @@ class BERTVectorizer(Vectorizer):
             limit = min(max_sequence_size, len(bpes))
             token_indices[i][:limit] = bpes[:limit]
             mask_indices[i][:limit] = np.ones((limit,), dtype=np.int32)
-
+        pdb.set_trace()
         return np.concatenate((np.reshape(token_indices, [len(sequences), max_sequence_size, 1]),
                                np.reshape(mask_indices, [len(sequences), max_sequence_size, 1]),
                                np.reshape(seg_indices, [len(sequences), max_sequence_size, 1])), axis=-1)
@@ -59,11 +59,13 @@ class HgBERTVectorizer(Vectorizer):
 
     def load_tokenizer(self,max_sequence_size):
         hg_tokenizer = AutoTokenizer.from_pretrained(self.uri,max_len=max_sequence_size)
+        
         return hg_tokenizer
 
     def vectorize_inputs(self, sequences: List[List[str]], max_sequence_size=100, **kwargs):
 
         bert_tokenizer=self.load_tokenizer(max_sequence_size)
+        print("Loaded tokenizer from ",self.uri)
         token_indices = np.zeros((len(sequences), max_sequence_size), dtype=np.int32)
         seg_indices = np.zeros((len(sequences), max_sequence_size), dtype=np.int32)
         mask_indices = np.zeros((len(sequences), max_sequence_size), dtype=np.int32)
@@ -74,9 +76,22 @@ class HgBERTVectorizer(Vectorizer):
             token_indices[i][:limit] = bpes[:limit]
             mask_indices[i][:limit] = np.ones((limit,), dtype=np.int32)
 
-        return np.concatenate((np.reshape(token_indices, [len(sequences), max_sequence_size, 1]),
+        result = np.concatenate((np.reshape(token_indices, [len(sequences), max_sequence_size, 1]),
                                np.reshape(mask_indices, [len(sequences), max_sequence_size, 1]),
                                np.reshape(seg_indices, [len(sequences), max_sequence_size, 1])), axis=-1)
+
+        return result
+
+    def vectorize_inputs_(self, sequences: List[List[str]], max_sequence_size=100, **kwargs):
+
+        bert_tokenizer=self.load_tokenizer(max_sequence_size)
+        print("Loaded tokenizer from ",self.uri)
+
+        sequences=[' '.join([token for token in tokens]) for tokens in sequences]
+        
+        index_plus=bert_tokenizer(sequences,return_tensors="pt", padding='max_length', truncation=True, max_length=max_sequence_size)
+
+        return index_plus
 
 
 class ELMoVectorizer(Vectorizer):
