@@ -28,16 +28,11 @@ from nltk.tokenize import word_tokenize
 from sklearn.metrics import f1_score, precision_score, recall_score
 # import tensorflow as tf
 from json_loader import JSONLoader
-from vectorizer import W2VVectorizer, ELMoVectorizer, BERTVectorizer,HgBERTVectorizer
+from vectorizer import HgBERTVectorizer
 from data import DATA_SET_DIR, MODELS_DIR
 from configuration import Configuration
 from metrics import mean_recall_k, mean_precision_k, mean_ndcg_score, mean_rprecision_k
 from neural_networks.lmtc_networks.document_classification import DocumentClassification
-from neural_networks.lmtc_networks.label_driven_classification import LabelDrivenClassification
-from tensorflow.keras import backend as K
-from tensorflow.keras.models import load_model
-from neural_networks.layers.bert import BERT
-from sklearn.preprocessing import MultiLabelBinarizer
 
 LOGGER = logging.getLogger(__name__)
 
@@ -46,16 +41,10 @@ class LMTC:
 
     def __init__(self):
         super().__init__()
-        if 'elmo' in Configuration['model']['token_encoding']:
-            self.vectorizer = ELMoVectorizer()
-            self.vectorizer2 = W2VVectorizer(w2v_model=Configuration['model']['embeddings'])
-        elif Configuration['model']['architecture'].lower() in ['bert']:
-            self.vectorizer = BERTVectorizer()
-        elif Configuration['model']['architecture'].lower() in ['legalbert','roberta','legalroberta',"hf"]:
-            self.vectorizer = HgBERTVectorizer()
-            print("Loaded tokenizer from ",Configuration["model"]["uri"])
-        else:
-            raise ValueError('A very specific bad thing happened')
+
+        self.vectorizer = HgBERTVectorizer()
+        print("Loaded tokenizer from ",Configuration["model"]["uri"])
+
         self.load_label_descriptions()
 
     def load_label_descriptions(self):
@@ -126,9 +115,9 @@ class LMTC:
         for i, (label, index) in enumerate(self.label_ids.items()):
             label_terms.append([token for token in word_tokenize(data[label]['label']) if re.search('[A-Za-z]', token)])
             self.label_terms_text.append(data[label]['label'])
-        self.label_terms_ids = self.vectorizer.vectorize_inputs(label_terms,
-                                                                max_sequence_size=Configuration['sampling']['max_label_size'],
-                                                                features=['word'])
+        self.label_terms_ids = self.vectorizer.produce_label_term_ids(label_terms,
+                                                                      max_sequence_size=Configuration['sampling']['max_label_size'],
+                                                                      features=['word'])
 
         # Eliminate labels out of scope (not in datasets)
         self.labels_cutoff = len(frequent) + len(few) + len(true_zero)
@@ -170,49 +159,26 @@ class LMTC:
          """
         samples = []
         targets = []
-        for document in documents:
-            if Configuration['sampling']['hierarchical']:
-                samples.append(document.sentences)
-            else:
-                # .
-                samples.append(document.tokens)
+        for document in tqdm.tqdm(documents):
+
+            samples.append(document.tokens)
             targets.append(document.tags)
 
         del documents
         return samples, targets
 
     def encode_dataset(self, sequences, tags):
-        if Configuration['sampling']['hierarchical']:
-            samples = np.zeros((len(sequences), Configuration['sampling']['max_sequences_size'],
-                                Configuration['sampling']['max_sequence_size'],), dtype=np.int32)
+        samples = self.vectorizer.vectorize_inputs(sequences=sequences,
+                                                   max_sequence_size=Configuration['sampling']['max_sequence_size'])
 
-            targets = np.zeros((len(sequences), len(self.label_ids)), dtype=np.int32)
-            for i, (sub_sequences, document_tags) in enumerate(zip(sequences, tags)):
-                sample = self.vectorizer.vectorize_inputs(sequences=sub_sequences[:Configuration['sampling']['max_sequences_size']],
-                                                          max_sequence_size=Configuration['sampling']['max_sequence_size'])
-                samples[i, :len(sample)] = sample
-                for tag in document_tags:
-                    if tag in self.label_ids:
-                        targets[i][self.label_ids[tag]] = 1
-            samples = np.asarray(samples)
-        else:
-            samples = self.vectorizer.vectorize_inputs_(sequences=sequences,
-                                                       max_sequence_size=Configuration['sampling']['max_sequence_size'])
-
-            if 'elmo' in Configuration['model']['token_encoding']:
-                samples2 = self.vectorizer2.vectorize_inputs(sequences=sequences,
-                                                             max_sequence_size=Configuration['sampling']['max_sequence_size'])
-
-            targets = np.zeros((len(sequences), len(self.label_ids)), dtype=np.int32)
-            for i, (document_tags) in enumerate(tags):
-                for tag in document_tags:
-                    if tag in self.label_ids:
-                        targets[i][self.label_ids[tag]] = 1
+        targets = np.zeros((len(sequences), len(self.label_ids)), dtype=np.int32)
+        for i, (document_tags) in enumerate(tags):
+            for tag in document_tags:
+                if tag in self.label_ids:
+                    targets[i][self.label_ids[tag]] = 1
 
         del sequences, tags
 
-        if 'elmo' in Configuration['model']['token_encoding']:
-            return [samples, samples2], targets
             
         return samples,targets # bert&BERT, 
 
@@ -233,7 +199,6 @@ class LMTC:
         # Load training/validation data
         LOGGER.info('Load training/validation data')
         LOGGER.info('------------------------------')
-        model_type=Configuration['model']['architecture']# BERT ,to set max length
                 
         train_documents_fn="data/generators/train_documents.pickle"
         val_documents_fn="data/generators/val_documents.pickle"
@@ -293,16 +258,19 @@ class LMTC:
             val_samples, val_tags = self.process_dataset(val_documents)
             val_generator = SampleGenerator(val_samples, val_tags, experiment=self,
                                             batch_size=Configuration['model']['batch_size'])
-            # for eval
+            """val_generator = SampleGenerator(val_samples, val_targets, experiment=self,
+                                            batch_size=Configuration['model']['batch_size'])"""
             val_samples, val_targets = self.encode_dataset(val_samples, val_tags)
-            print("finished vectorize val")
+            # for eval
 
+            print("finished vectorize val")
             train_samples, train_tags = self.process_dataset(train_documents)
-            train_generator = SampleGenerator(train_samples, train_tags, experiment=self,
+            train_samples, train_targets = self.encode_dataset(train_samples, train_tags)
+            train_generator = SampleGenerator(train_samples, train_targets, experiment=self,
                                             batch_size=Configuration['model']['batch_size'])
             print("finished vectorize train")
-            limit = len(test_documents) % Configuration['model']['batch_size'] if Configuration['model']['architecture'] == 'BERT' else 0
-            test_samples, test_tags = self.process_dataset(test_documents if not limit else test_documents[:-limit])
+
+            test_samples, test_tags = self.process_dataset(test_documents)
             test_samples, test_targets = self.encode_dataset(test_samples, test_tags)
             print("finished vectorize test")
 
@@ -447,16 +415,10 @@ class LMTC:
             
             LOGGER.info('Compile neural network')
             LOGGER.info('------------------------------')
-            if 'label' in Configuration['model']['architecture'].lower():
-                network = LabelDrivenClassification(self.label_terms_ids)
-            else:
-                network = DocumentClassification(self.label_terms_ids)
 
-            network.compile(n_hidden_layers=Configuration['model']['n_hidden_layers'],
-                            hidden_units_size=Configuration['model']['hidden_units_size'],
-                            dropout_rate=Configuration['model']['dropout_rate'],
-                            word_dropout_rate=Configuration['model']['word_dropout_rate'],
-                            lr=Configuration['model']['lr'],freeze_pretrained=Configuration["model"]["freeze_pretrained"])
+            network = DocumentClassification(self.label_terms_ids)
+
+            network.compile(lr=Configuration['model']['lr'], freeze_pretrained=Configuration["model"]["freeze_pretrained"])
 
             network.model.summary(line_length=200, print_fn=LOGGER.info)
 
@@ -466,7 +428,6 @@ class LMTC:
             early_stopping = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
             model_checkpoint = ModelCheckpoint(filepath=weights_file, monitor='val_loss', mode='auto',
                                             verbose=1, save_best_only=True, save_weights_only=True)
-            batch_size=Configuration['model']['batch_size']
             
             # Fit model
             LOGGER.info('Fit model')
@@ -482,8 +443,8 @@ class LMTC:
                                                         steps_per_epoch=len(train_generator),
                                                         epochs=Configuration['model']['epochs'],
                                                         callbacks=[early_stopping,Calculate_performance(val_samples, val_targets,list(self.label_ids.keys()))],
-                                                        # callbacks=[early_stopping, model_checkpoint,Calculate_performance(val_samples, val_targets)],
-                                                            verbose = True)
+                                                        # callbacks=[early_stopping, Calculate_performance(val_generator,list(self.label_ids.keys()))],
+                                                          verbose = True)
                 best_epoch = np.argmin(fit_history.history['val_loss']) + 1
                 n_epochs = len(fit_history.history['val_loss'])
                 val_loss_per_epoch = '- ' + ' '.join('-' if fit_history.history['val_loss'][i] < np.min(fit_history.history['val_loss'][:i])
@@ -494,9 +455,7 @@ class LMTC:
             except KeyboardInterrupt:
                 LOGGER.info("skip rest of training")
                 
-            network.model.save(os.path.join(MODELS_DIR, '{}.h5'.format('{}_{}_{}'.format(
-                Configuration['task']['dataset'].upper(), 'HIERARCHICAL' if Configuration['sampling']['hierarchical'] else 'FLAT',
-                Configuration['model']['architecture'].upper()))))
+            network.model.save_pretrained(os.path.join(MODELS_DIR))
 
             del train_generator
 
@@ -504,19 +463,17 @@ class LMTC:
 
             LOGGER.info('Calculate performance on valid data')
             LOGGER.info('------------------------------')
-            val_predictions = model.predict(val_samples,
-                                        batch_size=Configuration['model']['batch_size']
-                                        if Configuration['model']['architecture'] == 'BERT'
-                                            or Configuration['model']['token_encoding'] == 'elmo' else None)
+            val_samples_array = [val_samples[input_type] for input_type in val_samples.keys()]
+            val_predictions = network.model.predict(val_samples_array,
+                                        batch_size=Configuration['model']['batch_size'])[0]
 
             self.calculate_performance(predictions=val_predictions, true_targets=val_targets)
             
             LOGGER.info('Calculate performance on test data')
             LOGGER.info('------------------------------')
-            test_predictions = model.predict(test_samples,
-                                batch_size=Configuration['model']['batch_size']
-                                if Configuration['model']['architecture'] == 'BERT'
-                                    or Configuration['model']['token_encoding'] == 'elmo' else None)
+            test_samples_array = [test_samples[input_type] for input_type in test_samples.keys()]
+            test_predictions = network.model.predict(test_samples_array,
+                                batch_size=Configuration['model']['batch_size'])[0]
             self.calculate_performance(predictions=test_predictions, true_targets=test_targets)
 
 
@@ -565,16 +522,19 @@ class Calculate_performance(Callback):
   """
 
     def __init__(self, true_samples, true_targets, class_):
+    # def __init__(self, val_generator, class_):
         super(Calculate_performance, self).__init__()
         self.true_samples = true_samples
-        self.true_targets=np.array(MultiLabelBinarizer(classes=class_).fit_transform(true_targets))
+        self.true_targets = true_targets
+        # self.val_generator = val_generator
 
     def on_epoch_end(self, epoch, logs=None):
-        
-        predictions = self.model.predict(self.true_samples,
-                                            batch_size=Configuration['model']['batch_size']
-                                            if Configuration['model']['architecture'] == 'BERT'
-                                               or Configuration['model']['token_encoding'] == 'elmo' else None)
+        # predictions = self.model.predict(self.true_samples)
+        true_samples_array = [self.true_samples[input_type] for input_type in self.true_samples.keys()]
+        predictions = self.model.predict(true_samples_array,
+                                            batch_size=Configuration['model']['batch_size'])[0]
+        # predictions = np.array(self.model(self.true_samples)[0])
+        # predictions = np.array(predictions)[0]
         pred_targets = (predictions > 0.5).astype('int32')
 
         # pdb.set_trace()
@@ -614,7 +574,7 @@ class SampleGenerator(Sequence):
 
     def __len__(self):
         """Denotes the number of batches per epoch"""
-        return int(np.ceil(len(self.data_samples) / self.batch_size))
+        return int(np.ceil(len(self.indices) / self.batch_size))
 
     def __getitem__(self, index):
         """Generate one batch of data"""
@@ -626,7 +586,10 @@ class SampleGenerator(Sequence):
         # Vectorize inputs (x,y)
         x_batch, y_batch = self.experiment.encode_dataset(samples, targets)# targets are actually tags
 
-        return x_batch, y_batch
+        input_ids = x_batch["input_ids"].numpy()
+        attention_mask = x_batch["attention_mask"].numpy()
+
+        return [input_ids,attention_mask], np.array(y_batch, dtype=np.int32)
 
     def on_epoch_end(self):
         """Updates indexes after each epoch"""
