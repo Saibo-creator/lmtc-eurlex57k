@@ -16,19 +16,21 @@ class HgBERTVectorizer():
 
     def load_tokenizer(self,max_sequence_size):
         hg_tokenizer = AutoTokenizer.from_pretrained(self.uri,max_len=max_sequence_size)
+        if Configuration["model"]["uri"]=="gpt2":
+            hg_tokenizer.pad_token = hg_tokenizer.eos_token
         
         return hg_tokenizer
 
     def produce_label_term_ids(self, sequences: List[List[str]], max_sequence_size=100, **kwargs):
 
-        bert_tokenizer=self.load_tokenizer(max_sequence_size)
+        tokenizer=self.load_tokenizer(max_sequence_size)
         print("Loaded tokenizer from ",self.uri)
         token_indices = np.zeros((len(sequences), max_sequence_size), dtype=np.int32)
         seg_indices = np.zeros((len(sequences), max_sequence_size), dtype=np.int32)
         mask_indices = np.zeros((len(sequences), max_sequence_size), dtype=np.int32)
 
         for i, tokens in enumerate(sequences):
-            bpes = bert_tokenizer.encode(' '.join([token for token in tokens]),padding='max_length', truncation=True, max_length=max_sequence_size)
+            bpes = tokenizer.encode(' '.join([token for token in tokens]),padding='max_length', truncation=True, max_length=max_sequence_size)
             limit = min(max_sequence_size, len(bpes))
             token_indices[i][:limit] = bpes[:limit]
             mask_indices[i][:limit] = np.ones((limit,), dtype=np.int32)
@@ -41,6 +43,8 @@ class HgBERTVectorizer():
 
     def vectorize_inputs(self, sequences: List[List[str]], max_sequence_size=100, **kwargs):
         tokenizer = AutoTokenizer.from_pretrained(self.uri, max_len=max_sequence_size)
+        if Configuration["model"]["uri"] == "gpt2":
+            tokenizer.pad_token = tokenizer.eos_token
 
         sequences=[' '.join([token for token in tokens]) for tokens in sequences]
         

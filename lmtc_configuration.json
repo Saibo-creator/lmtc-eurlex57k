@@ -7,15 +7,14 @@
     "architecture": "transformer",
     "dropout_rate": 0.2,
     "lr": 1e-5,
-    "batch_size": 2, 
-    "epochs": 2,
-    "bert": "bertbase",
-    "freeze_pretrained":false,
-    "uri":"saibo/legal-roberta-base"
+    "batch_size": 4,
+    "epochs": 40,
+    "freeze_pretrained": false,
+    "uri": "saibo/legal-roberta-base"
   },
   "sampling": {
     "max_sequences_size": null,
-    "max_sequence_size": 512,
+    "max_sequence_size": 128,
     "max_label_size": 15,
     "few_threshold": 50,
     "hierarchical": false,
