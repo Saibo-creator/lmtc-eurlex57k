@@ -11,24 +11,11 @@ Major modifications on the original code:
 2. integrate huggingface API 
 3. remove models not based on transformers
 
-## Requirements:
+## Conda Environment:
 
-nltk >= 3.5
-
-numpy >= 1.19.2
-
-scikit_learn >= 0.23.2
-
-spacy >= 2.3.2
-
-tensorflow >= 2.2.0
-
-torch >= 1.7.1
-
-tqdm >= 4.50.2
-
-transformers >= 3.5.1
-
+```shell
+conda env create -f contrastiveRetrieval.yml
+```
 ## Quick start:
 
 ### Install python requirements:
