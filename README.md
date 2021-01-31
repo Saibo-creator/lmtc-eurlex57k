@@ -63,7 +63,7 @@ nano ltmc_configuration.json
     "decision_type": "multi_label"
   },
   "model": {
-    "architecture": "LABEL_WISE_ATTENTION_NETWORK",
+    "architecture": "LABEL_WISE_ATTENTION_NETWORK",//BERT , legalbert
     "document_encoder": "grus",
     "n_hidden_layers": 1,
     "hidden_units_size": 300,
