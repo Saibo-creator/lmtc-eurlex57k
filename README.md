@@ -1,21 +1,33 @@
 ## Large-Scale Multi-Label Text Classification on EU Legislation
 
-This is the code used for the experiments described in the following paper:
-
+This is the code used for the first downstream task, it's derived from the original code for the following paper:
 
 > I. Chalkidis, M. Fergadiotis, P. Malakasiotis and I. Androutsopoulos, "Large-Scale Multi-Label Text Classification on EU Legislation". Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics (ACL 2019), Florence, Italy, (short papers), 2019 (https://www.aclweb.org/anthology/P19-1636/)
 
+The original code is: https://github.com/iliaschalkidis/lmtc-eurlex57k
+
+Major modifications on the original code:
+1. add support for tensorflow 2(integrate keras api)
+2. integrate huggingface API 
+3. remove models not based on transformers
+
 ## Requirements:
 
-* \>= Python 3.6
-* == TensorFlow 1.13
-* == TensorFlow-Hub 0.7.0
-* \>= Gensim 3.5.0
-* == Keras 2.2.4
-* \>= NLTK 3.4
-* \>= Scikit-Learn 0.20.1
-* \>= Spacy 2.1.0
-* \>= TQDM 4.28.1
+nltk >= 3.5
+
+numpy >= 1.19.2
+
+scikit_learn >= 0.23.2
+
+spacy >= 2.3.2
+
+tensorflow >= 2.2.0
+
+torch >= 1.7.1
+
+tqdm >= 4.50.2
+
+transformers >= 3.5.1
 
 ## Quick start:
 
@@ -27,15 +39,6 @@ python -m spacy download en_core_web_sm
 python
 >>> import nltk
 >>> nltk.download('punkt')
-```
-
-### Get pre-trained word embeddings (GloVe + Law2Vec):
-
-```
-wget -P data/vectors/ http://nlp.stanford.edu/data/glove.6B.zip
-unzip -j data/vectors/glove.6B.zip data/vectors/glove.6B.200d.txt
-echo -e "400000 200\n$(cat data/vectors/glove.6B.200d.txt)" > data/vectors/glove.6B.200d.txt
-wget -O data/vectors/law2vec.200d.txt https://archive.org/download/Law2Vec/Law2Vec.200d.txt
 ```
 
 ### Download dataset (EURLEX57K):
@@ -52,34 +55,26 @@ wget -O data/datasets/EURLEX57K/EURLEX57K.json http://nlp.cs.aueb.gr/software_an
 
 ### Select training options from the configuration JSON file:
 
-E.g., run a Label-wise Attention Network with BIGRUs (BIGRU-LWAN) with the best reported hyper-parameters
+E.g., fine-tune a legal-roberta-base:
 
 ```
-nano ltmc_configuration.json
-
 {
   "task": {
     "dataset": "EURLEX57K",
     "decision_type": "multi_label"
   },
   "model": {
-    "architecture": "LABEL_WISE_ATTENTION_NETWORK",//BERT , legalbert
-    "document_encoder": "grus",
-    "n_hidden_layers": 1,
-    "hidden_units_size": 300,
-    "dropout_rate": 0.4,
-    "word_dropout_rate": 0.00,
-    "lr": 0.001,
-    "batch_size": 16,
-    "epochs": 50,
-    "attention_mechanism": "attention",
-    "token_encoding": "word2vec",
-    "embeddings": "law2vec.200d.txt",
-    "bert": "bertbase"
+    "architecture": "transformer",
+    "dropout_rate": 0.2,
+    "lr": 1e-5,
+    "batch_size": 4,
+    "epochs": 40,
+    "freeze_pretrained": false,
+    "uri": "saibo/legal-roberta-base"
   },
   "sampling": {
     "max_sequences_size": null,
-    "max_sequence_size": 5000,
+    "max_sequence_size": 128,
     "max_label_size": 15,
     "few_threshold": 50,
     "hierarchical": false,
@@ -88,9 +83,9 @@ nano ltmc_configuration.json
 }
 ```
 
-**Supported models:** BIGRUS, LABEL_WISE_ATTENTION_NETWORK, ZERO_LABEL_WISE_ATTENTION_NETWORK, BERT
-**Supported token encodings:** word2vec, elmo 
-**Supported document encoders:** grus, cnns
+**Supported models:** Most models available on huggingface
+**Important models:** 'saibo/legal-roberta-base', 'roberta-base', 'bert-base-uncased', 'nlpaueb/legal-bert-base-uncased'
+
 
 ### Train a model:
 
