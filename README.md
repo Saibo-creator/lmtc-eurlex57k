@@ -14,7 +14,7 @@ Major modifications on the original code:
 ## Conda Environment:
 
 ```shell
-conda env create -f contrastiveRetrieval.yml
+conda env create -f huggingface_lmtc.yml
 ```
 ## Quick start:
 
